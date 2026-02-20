@@ -1,7 +1,7 @@
 //server side processing for auth actions"
 "use server";
 import { success } from "zod";
-import { register, login } from "../api/auth"
+import { register, login, admin, forgotPassword, resetPassword } from "../api/auth"
 import { setAuthToken, setUserData } from "../cookie";
 
 export const handleRegister=async(FormData:any)=>{
@@ -53,3 +53,62 @@ export const handleLogin=async(formData:any) =>{
         }
     }
 }
+
+export const handleAdmin = async (formData: any) => {
+    try {
+        const res = await admin(formData); // may throw with informative message
+
+        // If API returned a shape indicating failure, surface that message
+        if (res && res.success === false) {
+            return { success: false, message: res.message || JSON.stringify(res) };
+        }
+
+        // Normalize user and token from various possible shapes
+        const user = res?.data?.user ?? res?.user ?? res?.data ?? res;
+        const token = res?.data?.token ?? res?.token ?? undefined;
+
+        if (!user || Object.keys(user).length === 0) {
+            return { success: false, message: "Admin login succeeded but no user data was returned from server." };
+        }
+
+        // Ensure role exists
+        const role = user.role ?? user?.data?.role ?? undefined;
+        if (!role) {
+            return { success: false, message: "Admin login succeeded but role information is missing from server response." };
+        }
+
+        // Save auth info if available
+        const tokenToStore = token ?? res?.data ?? res;
+        await setAuthToken(tokenToStore);
+        await setUserData(user);
+
+        return { success: true, message: "Admin Login successful", data: user };
+    } catch (err: any) {
+        return { success: false, message: err?.message ?? "Admin Login failed" };
+    }
+};
+// Send forgot password
+export const handleForgotPassword = async (email: string) => {
+    try {
+        const result = await forgotPassword(email);
+        if (result.success) {
+            return { success: true, message: result.message };
+        }
+        return { success: false, message: result.message || "Failed to send reset email" };
+    } catch (err: Error | any) {
+        return { success: false, message: err.message || "Failed to send reset email" };
+    }
+};
+
+// Reset password
+export const handleResetPassword = async (token: string, password: string) => {
+    try {
+        const result = await resetPassword(token, password);
+        if (result.success) {
+            return { success: true, message: result.message };
+        }
+        return { success: false, message: result.message || "Failed to reset password" };
+    } catch (err: Error | any) {
+        return { success: false, message: err.message || "Failed to reset password" };
+    }
+};
