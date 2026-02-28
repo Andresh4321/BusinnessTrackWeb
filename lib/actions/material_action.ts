@@ -19,6 +19,15 @@ export const getMaterialsAction = async () => {
   }
 };
 
+export const getMaterialByIdAction = async (id: string) => {
+  try {
+    const response = await materialsAPI.getById(id);
+    return { success: true, data: response.data.data };
+  } catch (error: any) {
+    return { success: false, error: error.response?.data?.message || 'Failed to fetch material' };
+  }
+};
+
 export const updateMaterialAction = async (id: string, formData: any) => {
   try {
     const response = await materialsAPI.update(id, formData);

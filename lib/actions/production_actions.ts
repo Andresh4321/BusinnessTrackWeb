@@ -19,6 +19,15 @@ export const getProductionsAction = async () => {
   }
 };
 
+export const getProductionByIdAction = async (id: string) => {
+  try {
+    const response = await productionAPI.getById(id);
+    return { success: true, data: response.data.data };
+  } catch (error: any) {
+    return { success: false, error: error.response?.data?.message || 'Failed to fetch production' };
+  }
+};
+
 export const completeProductionAction = async (id: string, actualOutput: number) => {
   try {
     const response = await productionAPI.complete(id, actualOutput);
@@ -31,7 +40,7 @@ export const completeProductionAction = async (id: string, actualOutput: number)
 export const deleteProductionAction = async (id: string) => {
   try {
     await productionAPI.delete(id);
-    return { success: true };
+    return { success: true, message: "Production deleted successfully" };
   } catch (error: any) {
     return { success: false, error: error.response?.data?.message || 'Failed to delete production' };
   }

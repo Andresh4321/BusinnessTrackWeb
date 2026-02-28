@@ -148,7 +148,7 @@ const StockManagement = () => {
         {materials.map((material, index) => (
           <Card 
             key={material.id}
-            className="p-4 opacity-0 animate-scale-in"
+            className="p-4 opacity-0 animate-scale-in border-b border-border"
             style={{ animationDelay: `${index * 50}ms` }}
           >
             <div className="flex items-center justify-between mb-3">
@@ -190,7 +190,7 @@ const StockManagement = () => {
       </div>
 
       {/* Stock History */}
-      <Card className="opacity-0 animate-fade-in stagger-4">
+      <Card className="opacity-0 animate-fade-in stagger-4 border-b border-border">
         <div className="p-6 border-b border-border flex items-center gap-3">
           <History className="h-5 w-5 text-muted-foreground" />
           <div>
@@ -206,7 +206,7 @@ const StockManagement = () => {
         ) : (
           <div className="divide-y divide-border">
             {stockLogs.slice().reverse().slice(0, 10).map((log) => (
-              <div key={log.id} className="p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
+              <div key={log.id} className="p-4 flex items-center justify-between hover:bg-muted/50 transition-colors ">
                 <div className="flex items-center gap-4">
                   <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${
                     log.type === 'add' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
