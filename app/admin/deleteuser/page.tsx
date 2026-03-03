@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { getAllAdminUsers, deleteAdminUser } from "@/lib/api/auth";
 import { Trash2, AlertCircle } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "sonner"
 
 export const dynamic = "force-dynamic";
 

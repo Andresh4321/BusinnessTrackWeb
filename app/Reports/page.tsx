@@ -1,8 +1,10 @@
+"use client";
+
 import { BarChart3, Package, Factory, TrendingDown, DollarSign, Calendar } from 'lucide-react';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { DashboardLayout } from '../dashboard/DashboardLayout';
 import { Card } from '@/components/ui/card';
-import { useApp } from '@/contexts/AppContext';
-import { StatCard } from '@/components/dashboard/StatCard';
+import { useApp } from '../context/AppContext';
+import { StatCard } from '../dashboard/_components/StatCard';
 import {
   AreaChart,
   Area,
@@ -106,7 +108,8 @@ const Reports = () => {
       {/* Charts Row */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
         {/* Production Chart */}
-        <Card className="p-6 opacity-0 animate-fade-in stagger-4">
+          {/* Critical Items */}
+        <Card className="p-6 opacity-0 animate-fade-in stagger-4 ">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="font-display text-lg font-semibold">Daily Production</h2>
@@ -168,7 +171,11 @@ const Reports = () => {
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px'
                   }}
-                  formatter={(value: number) => [`${value.toFixed(1)}%`, 'Wastage']}
+                  formatter={(value) => {
+                   if (typeof value !== "number") return ["0%", "Wastage"]
+                  return [`${value}%`, "Wastage"]
+                   }}
+
                 />
                 <Bar 
                   dataKey="wastage" 
@@ -249,7 +256,11 @@ const Reports = () => {
                       ))}
                     </Pie>
                     <Tooltip 
-                      formatter={(value: number) => [`$${value.toFixed(2)}`, 'Value']}
+                      formatter={(value: number | undefined) => [
+                    `$${(value ?? 0).toFixed(2)}`,
+                         "Value",
+                              ]}
+
                       contentStyle={{ 
                         backgroundColor: 'hsl(var(--card))', 
                         border: '1px solid hsl(var(--border))',

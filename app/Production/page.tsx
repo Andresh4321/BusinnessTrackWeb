@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Factory, Plus, Play, CheckCircle, Trash2, BookOpen } from 'lucide-react';
 import { DashboardLayout } from '../dashboard/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -23,15 +23,57 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  createRecipeAction, 
+  getRecipesAction, 
+  deleteRecipeAction,
+  createProductionAction,
+  getProductionsAction,
+  completeProductionAction,
+  deleteProductionAction
+} from '@/lib/actions/production_actions';
+
+interface Recipe {
+  id?: string;
+  _id?: string;
+  name: string;
+  description?: string;
+  price: number;
+  sellingPrice?: number;
+  ingredients: Array<{
+    materialId: string;
+    materialName?: string;
+    quantity: number;
+  }>;
+}
+
+interface ProductionBatch {
+  id?: string;
+  _id?: string;
+  recipeId: string;
+  recipeName: string;
+  quantity: number;
+  estimatedOutput: number;
+  actualOutput?: number;
+  status: 'ongoing' | 'completed';
+  wastage?: number;
+  createdAt?: string;
+  completedAt?: string;
+}
 
 const Production = () => {
-  const { materials, recipes, batches, addRecipe, deleteRecipe, startBatch, completeBatch } = useApp();
+  const { materials } = useApp();
   const { toast } = useToast();
   
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [batches, setBatches] = useState<ProductionBatch[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCreatingRecipe, setIsCreatingRecipe] = useState(false);
+  const [isCreatingBatch, setIsCreatingBatch] = useState(false);
   const [isRecipeOpen, setIsRecipeOpen] = useState(false);
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const [isCompleteOpen, setIsCompleteOpen] = useState(false);
-  const [selectedBatch, setSelectedBatch] = useState<string | null>(null);
+  const [selectedBatch, setSelectedBatch] = useState<ProductionBatch | null>(null);
   const [actualOutput, setActualOutput] = useState('');
 
   const [recipeForm, setRecipeForm] = useState({
@@ -46,6 +88,37 @@ const Production = () => {
     quantity: '',
     estimatedOutput: '',
   });
+
+  // Load recipes and batches on component mount
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [recipesRes, batchesRes] = await Promise.all([
+        getRecipesAction(),
+        getProductionsAction()
+      ]);
+
+      if (recipesRes.success) {
+        setRecipes(recipesRes.data || []);
+      }
+      if (batchesRes.success) {
+        setBatches(batchesRes.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to load data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load recipes and batches",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const addIngredient = () => {
     setRecipeForm({
@@ -67,7 +140,7 @@ const Production = () => {
     });
   };
 
-  const handleRecipeSubmit = (e: React.FormEvent) => {
+  const handleRecipeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!recipeForm.name || !recipeForm.price || recipeForm.ingredients.length === 0) {
@@ -89,23 +162,43 @@ const Production = () => {
       return;
     }
 
-    addRecipe({
-      name: recipeForm.name,
-      description: recipeForm.description,
-      price: parseFloat(recipeForm.price),
-      ingredients: validIngredients.map(i => ({
-        materialId: i.materialId,
-        materialName: materials.find(m => m.id === i.materialId)?.name || '',
-        quantity: parseFloat(i.quantity),
-      })),
-    });
+    setIsCreatingRecipe(true);
+    try {
+      const result = await createRecipeAction({
+        name: recipeForm.name,
+        description: recipeForm.description,
+        sellingPrice: parseFloat(recipeForm.price),
+        ingredients: validIngredients.map(i => ({
+          materialId: i.materialId,
+          quantity: parseFloat(i.quantity),
+        })),
+      });
 
-    toast({ title: "Success", description: "Recipe created successfully" });
-    setRecipeForm({ name: '', description: '', price: '', ingredients: [] });
-    setIsRecipeOpen(false);
+      if (result.success) {
+        toast({ title: "Success", description: "Recipe created successfully" });
+        setRecipeForm({ name: '', description: '', price: '', ingredients: [] });
+        setIsRecipeOpen(false);
+        await loadData();
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to create recipe",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error creating recipe:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create recipe",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingRecipe(false);
+    }
   };
 
-  const handleBatchSubmit = (e: React.FormEvent) => {
+  const handleBatchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!batchForm.recipeId || !batchForm.quantity || !batchForm.estimatedOutput) {
@@ -117,8 +210,15 @@ const Production = () => {
       return;
     }
 
-    const recipe = recipes.find(r => r.id === batchForm.recipeId);
-    if (!recipe) return;
+    const recipe = recipes.find(r => (r.id || r._id) === batchForm.recipeId);
+    if (!recipe) {
+      toast({
+        title: "Error",
+        description: "Recipe not found",
+        variant: "destructive",
+      });
+      return;
+    }
 
     // Check if we have enough materials
     for (const ing of recipe.ingredients) {
@@ -134,34 +234,100 @@ const Production = () => {
       }
     }
 
-    startBatch({
-      recipeId: batchForm.recipeId,
-      recipeName: recipe.name,
-      quantity: parseFloat(batchForm.quantity),
-      estimatedOutput: parseFloat(batchForm.estimatedOutput),
-    });
+    setIsCreatingBatch(true);
+    try {
+      const result = await createProductionAction({
+        recipeId: batchForm.recipeId,
+        quantity: parseFloat(batchForm.quantity),
+        estimatedOutput: parseFloat(batchForm.estimatedOutput),
+      });
 
-    toast({ title: "Success", description: "Production batch started" });
-    setBatchForm({ recipeId: '', quantity: '', estimatedOutput: '' });
-    setIsBatchOpen(false);
+      if (result.success) {
+        toast({ title: "Success", description: "Production batch started" });
+        setBatchForm({ recipeId: '', quantity: '', estimatedOutput: '' });
+        setIsBatchOpen(false);
+        await loadData();
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to start production",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error creating batch:', error);
+      toast({
+        title: "Error",
+        description: "Failed to start production",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingBatch(false);
+    }
   };
 
-  const handleCompleteBatch = () => {
+  const handleCompleteBatch = async () => {
     if (!selectedBatch || !actualOutput) return;
     
-    completeBatch(selectedBatch, parseFloat(actualOutput));
-    toast({ title: "Success", description: "Batch completed successfully" });
-    setSelectedBatch(null);
-    setActualOutput('');
-    setIsCompleteOpen(false);
+    try {
+      const batchId = selectedBatch.id || selectedBatch._id || '';
+      const result = await completeProductionAction(batchId, parseFloat(actualOutput));
+
+      if (result.success) {
+        toast({ title: "Success", description: "Batch completed successfully" });
+        setSelectedBatch(null);
+        setActualOutput('');
+        setIsCompleteOpen(false);
+        await loadData();
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to complete batch",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error completing batch:', error);
+      toast({
+        title: "Error",
+        description: "Failed to complete batch",
+        variant: "destructive",
+      });
+    }
   };
 
-  const ongoingBatches = batches.filter(b => b.status === 'ongoing');
-  const completedBatches = batches.filter(b => b.status === 'completed');
+  const handleDeleteRecipe = async (recipeId: string) => {
+    try {
+      const result = await deleteRecipeAction(recipeId);
+
+      if (result.success) {
+        toast({ title: "Deleted", description: "Recipe removed" });
+        await loadData();
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to delete recipe",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting recipe:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete recipe",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <DashboardLayout title="Production" subtitle="Manage recipes and production batches">
-      <Tabs defaultValue="batches" className="space-y-6">
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        </div>
+      ) : (
+        <Tabs defaultValue="batches" className="space-y-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <TabsList>
             <TabsTrigger value="batches">Production Batches</TabsTrigger>
@@ -252,11 +418,11 @@ const Production = () => {
                   </div>
 
                   <div className="flex gap-3 pt-4">
-                    <Button type="button" variant="outline" className="flex-1" onClick={() => setIsRecipeOpen(false)}>
+                    <Button type="button" variant="outline" className="flex-1" onClick={() => setIsRecipeOpen(false)} disabled={isCreatingRecipe}>
                       Cancel
                     </Button>
-                    <Button type="submit" variant="gradient" className="flex-1">
-                      Create Recipe
+                    <Button type="submit" variant="gradient" className="flex-1" disabled={isCreatingRecipe}>
+                      {isCreatingRecipe ? 'Creating...' : 'Create Recipe'}
                     </Button>
                   </div>
                 </form>
@@ -285,9 +451,12 @@ const Production = () => {
                         <SelectValue placeholder="Choose a recipe" />
                       </SelectTrigger>
                       <SelectContent>
-                        {recipes.map((r) => (
-                          <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                        ))}
+                        {recipes
+                          .map((r) => ({ ...r, optionId: r.id || r._id }))
+                          .filter((r): r is Recipe & { optionId: string } => Boolean(r.optionId))
+                          .map((r) => (
+                            <SelectItem key={r.optionId} value={r.optionId}>{r.name}</SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -310,11 +479,11 @@ const Production = () => {
                     />
                   </div>
                   <div className="flex gap-3 pt-4">
-                    <Button type="button" variant="outline" className="flex-1" onClick={() => setIsBatchOpen(false)}>
+                    <Button type="button" variant="outline" className="flex-1" onClick={() => setIsBatchOpen(false)} disabled={isCreatingBatch}>
                       Cancel
                     </Button>
-                    <Button type="submit" variant="gradient" className="flex-1">
-                      Start Batch
+                    <Button type="submit" variant="gradient" className="flex-1" disabled={isCreatingBatch}>
+                      {isCreatingBatch ? 'Starting...' : 'Start Batch'}
                     </Button>
                   </div>
                 </form>
@@ -328,22 +497,22 @@ const Production = () => {
           <div>
             <h2 className="font-display text-lg font-semibold mb-4 flex items-center gap-2">
               <Factory className="h-5 w-5 text-warning" />
-              Ongoing Production ({ongoingBatches.length})
+              Ongoing Production ({batches.filter(b => b.status === 'ongoing').length})
             </h2>
-            {ongoingBatches.length === 0 ? (
+            {batches.filter(b => b.status === 'ongoing').length === 0 ? (
               <Card className="p-8 text-center">
                 <p className="text-muted-foreground">No ongoing production batches</p>
               </Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {ongoingBatches.map((batch) => (
-                  <Card key={batch.id} className="p-5 border-warning/30 bg-warning/5">
+                {batches.filter(b => b.status === 'ongoing').map((batch) => (
+                  <Card key={batch.id || batch._id} className="p-5 border-warning/30 bg-warning/5">
                     <div className="flex items-center justify-between mb-3">
                       <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-warning/20 text-warning">
                         In Progress
                       </span>
                       <span className="text-sm text-muted-foreground">
-                        {new Date(batch.createdAt).toLocaleDateString()}
+                        {batch.createdAt ? new Date(batch.createdAt).toLocaleDateString() : 'N/A'}
                       </span>
                     </div>
                     <h3 className="font-display font-semibold text-lg mb-2">{batch.recipeName}</h3>
@@ -355,7 +524,7 @@ const Production = () => {
                       variant="success"
                       className="w-full"
                       onClick={() => {
-                        setSelectedBatch(batch.id);
+                        setSelectedBatch(batch);
                         setIsCompleteOpen(true);
                       }}
                     >
@@ -372,31 +541,31 @@ const Production = () => {
           <div>
             <h2 className="font-display text-lg font-semibold mb-4 flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-success" />
-              Completed ({completedBatches.length})
+              Completed ({batches.filter(b => b.status === 'completed').length})
             </h2>
-            {completedBatches.length === 0 ? (
+            {batches.filter(b => b.status === 'completed').length === 0 ? (
               <Card className="p-8 text-center">
                 <p className="text-muted-foreground">No completed batches yet</p>
               </Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ">
-                {completedBatches.slice().reverse().slice(0, 6).map((batch) => (
-                  <Card key={batch.id} className="p-5">
+                {batches.filter(b => b.status === 'completed').slice().reverse().slice(0, 6).map((batch) => (
+                  <Card key={batch.id || batch._id} className="p-5">
                     <div className="flex items-center justify-between mb-3 ">
                       <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-success/20 text-success ">
                         Completed
                       </span>
                       <span className="text-sm text-muted-foreground">
-                        {new Date(batch.completedAt || batch.createdAt).toLocaleDateString()}
+                        {batch.completedAt ? new Date(batch.completedAt).toLocaleDateString() : (batch.createdAt ? new Date(batch.createdAt).toLocaleDateString() : 'N/A')}
                       </span>
                     </div>
                     <h3 className="font-display font-semibold mb-2">{batch.recipeName}</h3>
                     <div className="space-y-1 text-sm">
                       <p className="text-muted-foreground">
-                        Output: <span className="text-foreground font-medium">{batch.actualOutput} / {batch.estimatedOutput}</span>
+                        Output: <span className="text-foreground font-medium">{batch.actualOutput || 0} / {batch.estimatedOutput}</span>
                       </p>
                       <p className={`font-medium ${(batch.wastage || 0) > 10 ? 'text-destructive' : 'text-success'}`}>
-                        Wastage: {batch.wastage?.toFixed(1)}%
+                        Wastage: {(batch.wastage || 0).toFixed(1)}%
                       </p>
                     </div>
                   </Card>
@@ -423,7 +592,7 @@ const Production = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {recipes.map((recipe, index) => (
                 <Card 
-                  key={recipe.id}
+                  key={recipe.id || recipe._id}
                   className="p-5 opacity-0 animate-scale-in border-b border-border"
                   style={{ animationDelay: `${index * 50}ms` }}
                 >
@@ -435,10 +604,7 @@ const Production = () => {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                      onClick={() => {
-                        deleteRecipe(recipe.id);
-                        toast({ title: "Deleted", description: "Recipe removed" });
-                      }}
+                      onClick={() => handleDeleteRecipe(recipe.id || recipe._id || '')}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -447,13 +613,13 @@ const Production = () => {
                   {recipe.description && (
                     <p className="text-sm text-muted-foreground mb-3">{recipe.description}</p>
                   )}
-                  <p className="text-lg font-bold text-primary mb-3">${recipe.price.toFixed(2)}</p>
+                  <p className="text-lg font-bold text-primary mb-3">${(recipe.price || recipe.sellingPrice || 0).toFixed(2)}</p>
                   <div className="pt-3 border-t border-border">
                     <p className="text-xs text-muted-foreground mb-2">Ingredients:</p>
                     <div className="flex flex-wrap gap-1">
                       {recipe.ingredients.map((ing) => (
                         <span key={ing.materialId} className="text-xs bg-muted px-2 py-1 rounded-full">
-                          {ing.materialName} ({ing.quantity})
+                          {ing.materialName || ing.materialId} ({ing.quantity})
                         </span>
                       ))}
                     </div>
@@ -463,7 +629,8 @@ const Production = () => {
             </div>
           )}
         </TabsContent>
-      </Tabs>
+        </Tabs>
+      )}
 
       {/* Complete Batch Dialog */}
       <Dialog open={isCompleteOpen} onOpenChange={setIsCompleteOpen}>

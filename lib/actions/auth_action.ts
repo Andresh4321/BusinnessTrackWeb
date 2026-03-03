@@ -1,7 +1,7 @@
 //server side processing for auth actions"
 "use server";
 import { success } from "zod";
-import { register, login, admin, forgotPassword, resetPassword } from "../api/auth"
+import { register, login, admin, forgotPassword, resetPassword, updateUserImage } from "../api/auth"
 import { setAuthToken, setUserData } from "../cookie";
 
 export const handleRegister=async(FormData:any)=>{
@@ -34,13 +34,18 @@ export const handleLogin=async(formData:any) =>{
     const result=await login (formData);
     //how to sendback to component
     if(result.success){
-        await setAuthToken(result.data);
-        await setUserData(result.data)
+        if (result.token) {
+            await setAuthToken(result.token);
+        }
+        if (result.data) {
+            await setUserData(result.data);
+        }
         
          return {
                 success:true,
                 message:"Login successful",
-                data:result.data
+                data:result.data,
+                token: result.token
             };
         }
         return{
@@ -110,5 +115,15 @@ export const handleResetPassword = async (token: string, password: string) => {
         return { success: false, message: result.message || "Failed to reset password" };
     } catch (err: Error | any) {
         return { success: false, message: err.message || "Failed to reset password" };
+    }
+};
+
+// Update user profile image
+export const handleUpdateUserImage = async (id: string, formData: FormData) => {
+    try {
+        const result = await updateUserImage(id, formData);
+        return { success: true, data: result, message: 'Profile image updated successfully' };
+    } catch (err: Error | any) {
+        return { success: false, message: err.message || 'Failed to update profile image' };
     }
 };
