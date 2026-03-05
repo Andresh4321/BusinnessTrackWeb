@@ -1,15 +1,33 @@
 "use client";
 
+import { useEffect, useState } from 'react';
 import { AlertTriangle, Package, TrendingDown, CheckCircle } from 'lucide-react';
 import { DashboardLayout } from '../dashboard/DashboardLayout';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
-import { useApp } from '../context/AppContext';
+import { fetchInventoryMaterials, InventoryMaterial } from '@/lib/api/material';
 
 export default function LowStockAlerts() {
   const router = useRouter();
-  const { materials } = useApp();
+  const [materials, setMaterials] = useState<InventoryMaterial[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+        const inventory = await fetchInventoryMaterials();
+        setMaterials(inventory);
+      } catch (error) {
+        console.error('Failed to load low-stock data', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, []);
   
   const criticalItems = materials.filter(m => (m.quantity / m.minimumStock) * 100 <= 50);
   const lowItems = materials.filter(m => {
@@ -70,7 +88,11 @@ export default function LowStockAlerts() {
       </div>
 
       {/* Alerts List */}
-      {materials.length === 0 ? (
+      {loading ? (
+        <Card className="flex flex-col items-center justify-center py-16">
+          <p className="text-muted-foreground">Loading inventory...</p>
+        </Card>
+      ) : materials.length === 0 ? (
         <Card className="flex flex-col items-center justify-center py-16">
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted mb-6">
             <Package className="h-10 w-10 text-muted-foreground" />

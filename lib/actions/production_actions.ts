@@ -1,4 +1,3 @@
-"use server";
 import { productionAPI } from '../api/production';
 import { recipeAPI } from '../api/recipe';
 

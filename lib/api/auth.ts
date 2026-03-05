@@ -46,14 +46,21 @@ export const admin = async (adminData: any) => {
 
         const data = response.data;
 
-        // If backend explicitly returns success: false, treat it as an error with a clear message
+        // Keep expected auth failures as normal responses (avoid noisy thrown errors in UI flow)
         if (data && data.success === false) {
             const m = data.message ?? (typeof data === "object" ? JSON.stringify(data) : String(data));
-            throw new Error(m);
+            return { success: false, message: m };
         }
 
         return data;
     } catch (err: any) {
+        const status = err?.response?.status;
+        if (status === 401 || status === 403) {
+            const d = err?.response?.data;
+            const message = d?.message || "Access denied: Admins only";
+            return { success: false, message };
+        }
+
         // If there's no response object it's likely a network/connection/CORS error
         const base = axios.defaults?.baseURL ?? "(same origin)";
         if (!err?.response || err?.message === "Network Error") {

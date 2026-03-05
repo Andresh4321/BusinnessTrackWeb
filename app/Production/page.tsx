@@ -6,8 +6,8 @@ import { DashboardLayout } from '../dashboard/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { useApp } from '../context/AppContext';
 import { useToast } from '../hooks/use-toast';
+import { fetchInventoryMaterials, InventoryMaterial } from '@/lib/api/material';
 import {
   Dialog,
   DialogContent,
@@ -62,8 +62,8 @@ interface ProductionBatch {
 }
 
 const Production = () => {
-  const { materials } = useApp();
   const { toast } = useToast();
+  const [materials, setMaterials] = useState<InventoryMaterial[]>([]);
   
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [batches, setBatches] = useState<ProductionBatch[]>([]);
@@ -97,17 +97,45 @@ const Production = () => {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [recipesRes, batchesRes] = await Promise.all([
+      const [recipesRes, batchesRes, inventory] = await Promise.all([
         getRecipesAction(),
-        getProductionsAction()
+        getProductionsAction(),
+        fetchInventoryMaterials(),
       ]);
 
       if (recipesRes.success) {
-        setRecipes(recipesRes.data || []);
+        const mappedRecipes: Recipe[] = (recipesRes.data || []).map((recipe: any) => ({
+          id: recipe._id,
+          _id: recipe._id,
+          name: recipe.name,
+          description: recipe.description,
+          price: recipe.selling_price || 0,
+          sellingPrice: recipe.selling_price || 0,
+          ingredients: (recipe.ingredients || []).map((ing: any) => ({
+            materialId: ing.material?._id || ing.material,
+            materialName: ing.material?.name || ing.name,
+            quantity: ing.quantity,
+          })),
+        }));
+        setRecipes(mappedRecipes);
       }
       if (batchesRes.success) {
-        setBatches(batchesRes.data || []);
+        const mappedBatches: ProductionBatch[] = (batchesRes.data || []).map((batch: any) => ({
+          id: batch._id,
+          _id: batch._id,
+          recipeId: batch.recipe?._id || batch.recipe,
+          recipeName: batch.recipe?.name || 'Unknown Recipe',
+          quantity: batch.batchQuantity || 0,
+          estimatedOutput: batch.estimatedOutput || 0,
+          actualOutput: batch.actualOutput,
+          status: batch.status,
+          wastage: batch.wastage || 0,
+          createdAt: batch.created_at,
+          completedAt: batch.updated_at,
+        }));
+        setBatches(mappedBatches);
       }
+      setMaterials(inventory);
     } catch (error) {
       console.error('Failed to load data:', error);
       toast({
@@ -167,11 +195,15 @@ const Production = () => {
       const result = await createRecipeAction({
         name: recipeForm.name,
         description: recipeForm.description,
-        sellingPrice: parseFloat(recipeForm.price),
-        ingredients: validIngredients.map(i => ({
-          materialId: i.materialId,
-          quantity: parseFloat(i.quantity),
-        })),
+        selling_price: parseFloat(recipeForm.price),
+        ingredients: validIngredients.map(i => {
+          const selected = materials.find((m) => m.id === i.materialId);
+          return {
+            name: selected?.name || 'Material',
+            material: i.materialId,
+            quantity: parseFloat(i.quantity),
+          };
+        }),
       });
 
       if (result.success) {
@@ -210,6 +242,16 @@ const Production = () => {
       return;
     }
 
+    const batchQuantity = parseFloat(batchForm.quantity);
+    if (Number.isNaN(batchQuantity) || batchQuantity <= 0) {
+      toast({
+        title: "Invalid Quantity",
+        description: "Batch quantity must be greater than 0",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const recipe = recipes.find(r => (r.id || r._id) === batchForm.recipeId);
     if (!recipe) {
       toast({
@@ -220,25 +262,36 @@ const Production = () => {
       return;
     }
 
-    // Check if we have enough materials
-    for (const ing of recipe.ingredients) {
-      const material = materials.find(m => m.id === ing.materialId);
-      const needed = ing.quantity * parseFloat(batchForm.quantity);
-      if (!material || material.quantity < needed) {
-        toast({
-          title: "Insufficient Stock",
-          description: `Not enough ${ing.materialName}. Need ${needed}, have ${material?.quantity || 0}`,
-          variant: "destructive",
-        });
-        return;
-      }
+    // Check if we have enough materials before creating the batch
+    const shortages = recipe.ingredients
+      .map((ing) => {
+        const material = materials.find((m) => m.id === ing.materialId);
+        const available = material?.quantity || 0;
+        const needed = ing.quantity * batchQuantity;
+        return {
+          materialName: ing.materialName || material?.name || 'Material',
+          needed,
+          available,
+          insufficient: available < needed,
+        };
+      })
+      .filter((item) => item.insufficient);
+
+    if (shortages.length > 0) {
+      const first = shortages[0];
+      toast({
+        title: "Insufficient Materials",
+        description: `Cannot start production. ${first.materialName}: need ${first.needed}, available ${first.available}`,
+        variant: "destructive",
+      });
+      return;
     }
 
     setIsCreatingBatch(true);
     try {
       const result = await createProductionAction({
         recipeId: batchForm.recipeId,
-        quantity: parseFloat(batchForm.quantity),
+        quantity: batchQuantity,
         estimatedOutput: parseFloat(batchForm.estimatedOutput),
       });
 
@@ -342,82 +395,106 @@ const Production = () => {
                   New Recipe
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+              <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle className="font-display">Create Recipe</DialogTitle>
+                  <DialogTitle className="font-display text-xl">📖 Create Recipe</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleRecipeSubmit} className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Recipe Name</label>
+                <form onSubmit={handleRecipeSubmit} className="space-y-6 mt-6">
+                  {/* Recipe Name */}
+                  <div className="space-y-3">
+                    <label className="text-sm font-semibold flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">1</span>
+                      Recipe Name
+                    </label>
                     <Input
                       placeholder="e.g., 1-Tier Cake"
                       value={recipeForm.name}
                       onChange={(e) => setRecipeForm({ ...recipeForm, name: e.target.value })}
+                      className="h-10"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Description</label>
+
+                  {/* Description */}
+                  <div className="space-y-3">
+                    <label className="text-sm font-semibold flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">2</span>
+                      Description
+                    </label>
                     <Input
-                      placeholder="Brief description"
+                      placeholder="Brief description of the recipe"
                       value={recipeForm.description}
                       onChange={(e) => setRecipeForm({ ...recipeForm, description: e.target.value })}
+                      className="h-10"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Selling Price ($)</label>
+
+                  {/* Selling Price */}
+                  <div className="space-y-3">
+                    <label className="text-sm font-semibold flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">3</span>
+                      Selling Price ($)
+                    </label>
                     <Input
                       type="number"
                       step="0.01"
                       placeholder="e.g., 25.00"
                       value={recipeForm.price}
                       onChange={(e) => setRecipeForm({ ...recipeForm, price: e.target.value })}
+                      className="h-10"
                     />
                   </div>
                   
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium">Ingredients</label>
+                  {/* Ingredients */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg border border-primary/20">
+                      <label className="text-sm font-semibold flex items-center gap-2">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">4</span>
+                        Ingredients
+                      </label>
                       <Button type="button" variant="outline" size="sm" onClick={addIngredient}>
                         <Plus className="h-4 w-4 mr-1" />
                         Add
                       </Button>
                     </div>
-                    {recipeForm.ingredients.map((ing, index) => (
-                      <div key={index} className="flex gap-2 items-center">
-                        <Select
-                          value={ing.materialId}
-                          onValueChange={(v) => updateIngredient(index, 'materialId', v)}
-                        >
-                          <SelectTrigger className="flex-1">
-                            <SelectValue placeholder="Material" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {materials.map((m) => (
-                              <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          type="number"
-                          placeholder="Qty"
-                          className="w-20"
-                          value={ing.quantity}
-                          onChange={(e) => updateIngredient(index, 'quantity', e.target.value)}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-10 w-10 text-destructive"
-                          onClick={() => removeIngredient(index)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
+                    <div className="space-y-2">
+                      {recipeForm.ingredients.map((ing, index) => (
+                        <div key={index} className="flex gap-2 items-center p-3 bg-muted/50 rounded-lg border border-border">
+                          <Select
+                            value={ing.materialId}
+                            onValueChange={(v) => updateIngredient(index, 'materialId', v)}
+                          >
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="Select material" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-card border border-border">
+                              {materials.map((m) => (
+                                <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="number"
+                            placeholder="Qty"
+                            className="w-24"
+                            value={ing.quantity}
+                            onChange={(e) => updateIngredient(index, 'quantity', e.target.value)}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-10 w-10 text-destructive hover:bg-destructive/10"
+                            onClick={() => removeIngredient(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
-                  <div className="flex gap-3 pt-4">
+                  {/* Action Buttons */}
+                  <div className="flex gap-3 pt-6 border-t border-border">
                     <Button type="button" variant="outline" className="flex-1" onClick={() => setIsRecipeOpen(false)} disabled={isCreatingRecipe}>
                       Cancel
                     </Button>
@@ -436,21 +513,25 @@ const Production = () => {
                   Start Production
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
-                  <DialogTitle className="font-display">Start Production Batch</DialogTitle>
+                  <DialogTitle className="font-display text-xl">🏭 Start Production Batch</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleBatchSubmit} className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Select Recipe</label>
+                <form onSubmit={handleBatchSubmit} className="space-y-6 mt-6">
+                  {/* Recipe Selection */}
+                  <div className="space-y-3">
+                    <label className="text-sm font-semibold flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">1</span>
+                      Select Recipe
+                    </label>
                     <Select
                       value={batchForm.recipeId}
                       onValueChange={(v) => setBatchForm({ ...batchForm, recipeId: v })}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="h-10">
                         <SelectValue placeholder="Choose a recipe" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-card border border-border">
                         {recipes
                           .map((r) => ({ ...r, optionId: r.id || r._id }))
                           .filter((r): r is Recipe & { optionId: string } => Boolean(r.optionId))
@@ -460,30 +541,44 @@ const Production = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Quantity to Produce</label>
+
+                  {/* Quantity */}
+                  <div className="space-y-3">
+                    <label className="text-sm font-semibold flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">2</span>
+                      Quantity to Produce
+                    </label>
                     <Input
                       type="number"
                       placeholder="e.g., 10"
                       value={batchForm.quantity}
                       onChange={(e) => setBatchForm({ ...batchForm, quantity: e.target.value })}
+                      className="h-10"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Estimated Output (units/weight)</label>
+
+                  {/* Estimated Output */}
+                  <div className="space-y-3">
+                    <label className="text-sm font-semibold flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">3</span>
+                      Estimated Output
+                    </label>
                     <Input
                       type="number"
                       placeholder="e.g., 10"
                       value={batchForm.estimatedOutput}
                       onChange={(e) => setBatchForm({ ...batchForm, estimatedOutput: e.target.value })}
+                      className="h-10"
                     />
                   </div>
-                  <div className="flex gap-3 pt-4">
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3 pt-6 border-t border-border">
                     <Button type="button" variant="outline" className="flex-1" onClick={() => setIsBatchOpen(false)} disabled={isCreatingBatch}>
                       Cancel
                     </Button>
                     <Button type="submit" variant="gradient" className="flex-1" disabled={isCreatingBatch}>
-                      {isCreatingBatch ? 'Starting...' : 'Start Batch'}
+                      {isCreatingBatch ? 'Starting...' : 'Start Production'}
                     </Button>
                   </div>
                 </form>

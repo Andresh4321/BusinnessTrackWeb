@@ -22,6 +22,7 @@ interface AppContextType {
   completeBatch: (id: string, actualOutput: number) => void;
   getLowStockMaterials: () => Material[];
   getTotalInventoryValue: () => number;
+  clearAppData: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -36,6 +37,11 @@ export const useApp = () => {
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
+// Helper function to get user-specific storage key
+const getStorageKey = (baseKey: string, userId?: string) => {
+  return userId ? `${baseKey}_${userId}` : baseKey;
+};
+
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Initialize with empty state - will be hydrated from localStorage on client
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -44,60 +50,142 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [batches, setBatches] = useState<ProductionBatch[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  // Load from localStorage only on client side
+  // Load from localStorage only on client side and when user changes
   useEffect(() => {
-    const savedMaterials = localStorage.getItem('businesstrack_materials');
-    const savedSuppliers = localStorage.getItem('businesstrack_suppliers');
-    const savedStockLogs = localStorage.getItem('businesstrack_stocklogs');
-    const savedRecipes = localStorage.getItem('businesstrack_recipes');
-    const savedBatches = localStorage.getItem('businesstrack_batches');
+    // Get user ID from localStorage
+    const userData = localStorage.getItem('user');
+    const userId = userData ? JSON.parse(userData)?.id : null;
+    
+    // If user ID changed, clear old data and load new user's data
+    if (userId !== currentUserId) {
+      setCurrentUserId(userId);
+      
+      const savedMaterials = localStorage.getItem(getStorageKey('businesstrack_materials', userId));
+      const savedSuppliers = localStorage.getItem(getStorageKey('businesstrack_suppliers', userId));
+      const savedStockLogs = localStorage.getItem(getStorageKey('businesstrack_stocklogs', userId));
+      const savedRecipes = localStorage.getItem(getStorageKey('businesstrack_recipes', userId));
+      const savedBatches = localStorage.getItem(getStorageKey('businesstrack_batches', userId));
 
-    if (savedMaterials) {
-      const parsed = JSON.parse(savedMaterials);
-      console.log('Loaded materials:', parsed.length);
-      setMaterials(parsed);
+      if (savedMaterials) {
+        const parsed = JSON.parse(savedMaterials);
+        console.log('Loaded materials for user:', userId, 'count:', parsed.length);
+        setMaterials(parsed);
+      } else {
+        setMaterials([]);
+      }
+      if (savedSuppliers) {
+        const parsed = JSON.parse(savedSuppliers);
+        console.log('Loaded suppliers for user:', userId, 'count:', parsed.length);
+        setSuppliers(parsed);
+      } else {
+        setSuppliers([]);
+      }
+      if (savedStockLogs) {
+        setStockLogs(JSON.parse(savedStockLogs));
+      } else {
+        setStockLogs([]);
+      }
+      if (savedRecipes) {
+        const parsed = JSON.parse(savedRecipes);
+        console.log('Loaded recipes for user:', userId, 'count:', parsed.length);
+        setRecipes(parsed);
+      } else {
+        setRecipes([]);
+      }
+      if (savedBatches) {
+        setBatches(JSON.parse(savedBatches));
+      } else {
+        setBatches([]);
+      }
     }
-    if (savedSuppliers) {
-      const parsed = JSON.parse(savedSuppliers);
-      console.log('Loaded suppliers:', parsed.length);
-      setSuppliers(parsed);
-    }
-    if (savedStockLogs) setStockLogs(JSON.parse(savedStockLogs));
-    if (savedRecipes) {
-      const parsed = JSON.parse(savedRecipes);
-      console.log('Loaded recipes:', parsed.length);
-      setRecipes(parsed);
-    }
-    if (savedBatches) setBatches(JSON.parse(savedBatches));
     
     setIsHydrated(true);
   }, []);
 
+  // Listen for logout event from AuthContext
   useEffect(() => {
-    if (!isHydrated) return;
-    localStorage.setItem('businesstrack_materials', JSON.stringify(materials));
-  }, [materials, isHydrated]);
+    const handleLogout = () => {
+      console.log('Logout event received, clearing app data');
+      setMaterials([]);
+      setSuppliers([]);
+      setStockLogs([]);
+      setRecipes([]);
+      setBatches([]);
+      setCurrentUserId(null);
+    };
+
+    window.addEventListener('logout', handleLogout);
+    return () => window.removeEventListener('logout', handleLogout);
+  }, []);
+
+  // Listen for storage changes (for user/token changes) to detect logout or user switch
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      // If token is removed, clear all app data
+      if (e.key === 'token' && e.newValue === null) {
+        console.log('Token removed, clearing app data');
+        setMaterials([]);
+        setSuppliers([]);
+        setStockLogs([]);
+        setRecipes([]);
+        setBatches([]);
+        setCurrentUserId(null);
+      }
+      // If user data changed, reload
+      if (e.key === 'user') {
+        const userData = e.newValue ? JSON.parse(e.newValue) : null;
+        const userId = userData?.id || null;
+        
+        if (userId !== currentUserId) {
+          console.log('User changed from', currentUserId, 'to', userId);
+          setCurrentUserId(userId);
+          
+          // Load new user's data
+          const savedMaterials = localStorage.getItem(getStorageKey('businesstrack_materials', userId));
+          const savedSuppliers = localStorage.getItem(getStorageKey('businesstrack_suppliers', userId));
+          const savedStockLogs = localStorage.getItem(getStorageKey('businesstrack_stocklogs', userId));
+          const savedRecipes = localStorage.getItem(getStorageKey('businesstrack_recipes', userId));
+          const savedBatches = localStorage.getItem(getStorageKey('businesstrack_batches', userId));
+
+          setMaterials(savedMaterials ? JSON.parse(savedMaterials) : []);
+          setSuppliers(savedSuppliers ? JSON.parse(savedSuppliers) : []);
+          setStockLogs(savedStockLogs ? JSON.parse(savedStockLogs) : []);
+          setRecipes(savedRecipes ? JSON.parse(savedRecipes) : []);
+          setBatches(savedBatches ? JSON.parse(savedBatches) : []);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [currentUserId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
-    localStorage.setItem('businesstrack_suppliers', JSON.stringify(suppliers));
-  }, [suppliers, isHydrated]);
+    if (!isHydrated || !currentUserId) return;
+    localStorage.setItem(getStorageKey('businesstrack_materials', currentUserId), JSON.stringify(materials));
+  }, [materials, isHydrated, currentUserId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
-    localStorage.setItem('businesstrack_stocklogs', JSON.stringify(stockLogs));
-  }, [stockLogs, isHydrated]);
+    if (!isHydrated || !currentUserId) return;
+    localStorage.setItem(getStorageKey('businesstrack_suppliers', currentUserId), JSON.stringify(suppliers));
+  }, [suppliers, isHydrated, currentUserId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
-    localStorage.setItem('businesstrack_recipes', JSON.stringify(recipes));
-  }, [recipes, isHydrated]);
+    if (!isHydrated || !currentUserId) return;
+    localStorage.setItem(getStorageKey('businesstrack_stocklogs', currentUserId), JSON.stringify(stockLogs));
+  }, [stockLogs, isHydrated, currentUserId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
-    localStorage.setItem('businesstrack_batches', JSON.stringify(batches));
-  }, [batches, isHydrated]);
+    if (!isHydrated || !currentUserId) return;
+    localStorage.setItem(getStorageKey('businesstrack_recipes', currentUserId), JSON.stringify(recipes));
+  }, [recipes, isHydrated, currentUserId]);
+
+  useEffect(() => {
+    if (!isHydrated || !currentUserId) return;
+    localStorage.setItem(getStorageKey('businesstrack_batches', currentUserId), JSON.stringify(batches));
+  }, [batches, isHydrated, currentUserId]);
 
   const addMaterial = (material: Omit<Material, 'id' | 'createdAt'>) => {
     setMaterials(prev => [...prev, { ...material, id: generateId(), createdAt: new Date() }]);
@@ -201,6 +289,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return materials.reduce((total, m) => total + (m.quantity * m.costPerUnit), 0);
   };
 
+  const clearAppData = () => {
+    setMaterials([]);
+    setSuppliers([]);
+    setStockLogs([]);
+    setRecipes([]);
+    setBatches([]);
+    setCurrentUserId(null);
+  };
+
   return (
     <AppContext.Provider value={{
       materials,
@@ -223,6 +320,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       completeBatch,
       getLowStockMaterials,
       getTotalInventoryValue,
+      clearAppData,
     }}>
       {children}
     </AppContext.Provider>

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Package, Trash2, Edit2 } from 'lucide-react';
 import { DashboardLayout } from '../dashboard/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { useApp } from '../context/AppContext';
 import { useToast } from '../hooks/use-toast';
+import { materialsAPI, stockAPI } from '@/lib/api/endpoints';
 import {
   Dialog,
   DialogContent,
@@ -15,22 +15,91 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+interface Material {
+  id: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  costPerUnit: number;
+  minimumStock: number;
+}
 
 const Materials = () => {
-  const { materials, addMaterial, deleteMaterial, updateMaterial } = useApp();
   const { toast } = useToast();
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [editingMaterial, setEditingMaterial] = useState<any>(null);
+  const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    unit: '',
+    unit: 'kg',
     quantity: '',
     costPerUnit: '',
     minimumStock: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const units = ['kg', 'pieces', 'liter'];
+
+  // Fetch materials from backend on component mount
+  useEffect(() => {
+    fetchMaterials();
+  }, []);
+
+  const fetchMaterials = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch materials and stock data
+      const [materialsResponse, stockResponse] = await Promise.all([
+        materialsAPI.getAll(),
+        stockAPI.getCurrentStock()
+      ]);
+      
+      console.log('Fetched materials:', materialsResponse.data);
+      console.log('Fetched stock:', stockResponse.data);
+      
+      const backendMaterials = materialsResponse.data.data || [];
+      const stockData = stockResponse.data.data || [];
+      
+      // Create a map of material ID to quantity
+      const stockMap = new Map();
+      stockData.forEach((stock: any) => {
+        stockMap.set(stock.material?._id || stock.material, stock.quantity || 0);
+      });
+      
+      // Transform backend data to frontend format
+      const transformedMaterials = backendMaterials.map((material: any) => ({
+        id: material._id,
+        name: material.name,
+        unit: material.unit,
+        costPerUnit: material.unit_price,
+        minimumStock: material.minimum_stock,
+        quantity: stockMap.get(material._id) || 0,
+      }));
+      
+      setMaterials(transformedMaterials);
+    } catch (error: any) {
+      console.error('Failed to fetch materials:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to load materials",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name || !formData.unit || !formData.quantity || !formData.costPerUnit || !formData.minimumStock) {
@@ -42,32 +111,71 @@ const Materials = () => {
       return;
     }
 
-    addMaterial({
-      name: formData.name,
-      unit: formData.unit,
-      quantity: parseFloat(formData.quantity),
-      costPerUnit: parseFloat(formData.costPerUnit),
-      minimumStock: parseFloat(formData.minimumStock),
-    });
+    try {
+      // Backend expects: unit_price and minimum_stock (snake_case)
+      const materialData = {
+        name: formData.name,
+        unit: formData.unit,
+        unit_price: parseFloat(formData.costPerUnit),
+        minimum_stock: parseFloat(formData.minimumStock),
+      };
 
-    toast({
-      title: "Success",
-      description: "Material added successfully",
-    });
+      const response = await materialsAPI.create(materialData);
+      const createdMaterial = response.data.data;
+      
+      // Create initial stock if quantity > 0
+      const initialQuantity = parseFloat(formData.quantity);
+      if (initialQuantity > 0 && createdMaterial?._id) {
+        await stockAPI.createTransaction({
+          material: createdMaterial._id,
+          quantity: initialQuantity,
+          transaction_type: 'in',
+          description: 'Initial stock'
+        });
+      }
 
-    setFormData({ name: '', unit: '', quantity: '', costPerUnit: '', minimumStock: '' });
-    setIsOpen(false);
+      toast({
+        title: "Success",
+        description: "Material added successfully",
+      });
+
+      setFormData({ name: '', unit: '', quantity: '', costPerUnit: '', minimumStock: '' });
+      setIsOpen(false);
+      
+      // Refresh the materials list
+      await fetchMaterials();
+    } catch (error: any) {
+      console.error('Failed to create material:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to add material",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDelete = (id: string, name: string) => {
-    deleteMaterial(id);
-    toast({
-      title: "Deleted",
-      description: `${name} has been removed`,
-    });
+  const handleDelete = async (id: string, name: string) => {
+    try {
+      await materialsAPI.delete(id);
+      
+      toast({
+        title: "Deleted",
+        description: `${name} has been removed`,
+      });
+      
+      // Refresh the materials list
+      await fetchMaterials();
+    } catch (error: any) {
+      console.error('Failed to delete material:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to delete material",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleEdit = (material: any) => {
+  const handleEdit = (material: Material) => {
     setEditingMaterial(material);
     setFormData({
       name: material.name,
@@ -79,10 +187,10 @@ const Materials = () => {
     setIsEditOpen(true);
   };
 
-  const handleUpdate = (e: React.FormEvent) => {
+  const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.unit || !formData.quantity || !formData.costPerUnit || !formData.minimumStock) {
+    if (!formData.name || !formData.unit || !formData.costPerUnit || !formData.minimumStock) {
       toast({
         title: "Error",
         description: "Please fill in all fields",
@@ -93,22 +201,38 @@ const Materials = () => {
 
     if (!editingMaterial) return;
 
-    updateMaterial(editingMaterial.id, {
-      name: formData.name,
-      unit: formData.unit,
-      quantity: parseFloat(formData.quantity),
-      costPerUnit: parseFloat(formData.costPerUnit),
-      minimumStock: parseFloat(formData.minimumStock),
-    });
+    try {
+      // Backend expects: unit_price and minimum_stock (snake_case)
+      const materialData = {
+        name: formData.name,
+        unit: formData.unit,
+        unit_price: parseFloat(formData.costPerUnit),
+        minimum_stock: parseFloat(formData.minimumStock),
+      };
 
-    toast({
-      title: "Success",
-      description: "Material updated successfully",
-    });
+      await materialsAPI.update(editingMaterial.id, materialData);
+      
+      // Note: quantity changes should be handled through Stock Management page
 
-    setFormData({ name: '', unit: '', quantity: '', costPerUnit: '', minimumStock: '' });
-    setEditingMaterial(null);
-    setIsEditOpen(false);
+      toast({
+        title: "Success",
+        description: "Material updated successfully",
+      });
+
+      setFormData({ name: '', unit: '', quantity: '', costPerUnit: '', minimumStock: '' });
+      setEditingMaterial(null);
+      setIsEditOpen(false);
+      
+      // Refresh the materials list
+      await fetchMaterials();
+    } catch (error: any) {
+      console.error('Failed to update material:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to update material",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -131,60 +255,91 @@ const Materials = () => {
               Add Material
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle className="font-display">Add New Material</DialogTitle>
+              <DialogTitle className="font-display text-xl"> Add New Material</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Material Name</label>
+            <form onSubmit={handleSubmit} className="space-y-6 mt-6">
+              {/* Material Name */}
+              <div className="space-y-3">
+                <label className="text-sm font-semibold flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">1</span>
+                  Material Name
+                </label>
                 <Input
                   placeholder="e.g., Eggs"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="h-10"
                 />
               </div>
+
+              {/* Unit & Quantity */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Unit</label>
-                  <Input
-                    placeholder="e.g., pieces"
-                    value={formData.unit}
-                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  />
+                <div className="space-y-3">
+                  <label className="text-sm font-semibold flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">2</span>
+                    Unit
+                  </label>
+                  <Select value={formData.unit} onValueChange={(value) => setFormData({ ...formData, unit: value })}>
+                    <SelectTrigger className="h-10">
+                      <SelectValue placeholder="Select unit" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border border-border">
+                      {units.map((unit) => (
+                        <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Quantity</label>
+                <div className="space-y-3">
+                  <label className="text-sm font-semibold flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">3</span>
+                    Initial Quantity
+                  </label>
                   <Input
                     type="number"
                     placeholder="e.g., 100"
                     value={formData.quantity}
                     onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                    className="h-10"
                   />
                 </div>
               </div>
+
+              {/* Cost & Minimum Stock */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Cost per Unit ($)</label>
+                <div className="space-y-3">
+                  <label className="text-sm font-semibold flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">4</span>
+                    Cost per Unit ($)
+                  </label>
                   <Input
                     type="number"
                     step="0.01"
                     placeholder="e.g., 0.50"
                     value={formData.costPerUnit}
                     onChange={(e) => setFormData({ ...formData, costPerUnit: e.target.value })}
+                    className="h-10"
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Minimum Stock</label>
+                <div className="space-y-3">
+                  <label className="text-sm font-semibold flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">5</span>
+                    Minimum Stock
+                  </label>
                   <Input
                     type="number"
                     placeholder="e.g., 20"
                     value={formData.minimumStock}
                     onChange={(e) => setFormData({ ...formData, minimumStock: e.target.value })}
+                    className="h-10"
                   />
                 </div>
               </div>
-              <div className="flex gap-3 pt-4">
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-6 border-t border-border">
                 <Button type="button" variant="outline" className="flex-1" onClick={() => setIsOpen(false)}>
                   Cancel
                 </Button>
@@ -198,60 +353,82 @@ const Materials = () => {
 
         {/* Edit Material Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <DialogContent className="sm:max-w-md ">
+          <DialogContent className="sm:max-w-lg ">
             <DialogHeader>
-              <DialogTitle className="font-display">Edit Material</DialogTitle>
+              <DialogTitle className="font-display text-xl">✏️ Edit Material</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleUpdate} className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Material Name</label>
+            <form onSubmit={handleUpdate} className="space-y-6 mt-6">
+              {/* Material Name */}
+              <div className="space-y-3">
+                <label className="text-sm font-semibold flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">1</span>
+                  Material Name
+                </label>
                 <Input
                   placeholder="e.g., Eggs"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="h-10"
                 />
               </div>
+
+              {/* Unit & Cost */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Unit</label>
-                  <Input
-                    placeholder="e.g., pieces"
-                    value={formData.unit}
-                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  />
+                <div className="space-y-3">
+                  <label className="text-sm font-semibold flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">2</span>
+                    Unit
+                  </label>
+                  <Select value={formData.unit} onValueChange={(value) => setFormData({ ...formData, unit: value })}>
+                    <SelectTrigger className="h-10">
+                      <SelectValue placeholder="Select unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {units.map((unit) => (
+                        <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Quantity</label>
-                  <Input
-                    type="number"
-                    placeholder="e.g., 100"
-                    value={formData.quantity}
-                    onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Cost per Unit ($)</label>
+                <div className="space-y-3">
+                  <label className="text-sm font-semibold flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">3</span>
+                    Cost per Unit ($)
+                  </label>
                   <Input
                     type="number"
                     step="0.01"
                     placeholder="e.g., 0.50"
                     value={formData.costPerUnit}
                     onChange={(e) => setFormData({ ...formData, costPerUnit: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Minimum Stock</label>
-                  <Input
-                    type="number"
-                    placeholder="e.g., 20"
-                    value={formData.minimumStock}
-                    onChange={(e) => setFormData({ ...formData, minimumStock: e.target.value })}
+                    className="h-10"
                   />
                 </div>
               </div>
-              <div className="flex gap-3 pt-4">
+
+              {/* Minimum Stock */}
+              <div className="space-y-3">
+                <label className="text-sm font-semibold flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">4</span>
+                  Minimum Stock
+                </label>
+                <Input
+                  type="number"
+                  placeholder="e.g., 20"
+                  value={formData.minimumStock}
+                  onChange={(e) => setFormData({ ...formData, minimumStock: e.target.value })}
+                  className="h-10"
+                />
+              </div>
+
+              <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  <strong>💡 Tip:</strong> To adjust quantity, use the Stock Management page.
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-6 border-t border-border">
                 <Button 
                   type="button" 
                   variant="outline" 
@@ -273,7 +450,11 @@ const Materials = () => {
         </Dialog>
       </div>
 
-      {materials.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <p className="text-muted-foreground">Loading materials...</p>
+        </div>
+      ) : materials.length === 0 ? (
         <Card className="flex flex-col items-center justify-center py-16 ">
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted mb-6 ">
             <Package className="h-10 w-10 text-muted-foreground" />
@@ -293,7 +474,7 @@ const Materials = () => {
               <Card 
                 key={material.id}
                 className={`p-4 hover:shadow-md transition-all duration-200 opacity-0 animate-scale-in border-b border-border ${
-                  isLowStock ? 'border-destructive/50 bg-destructive/5 border-b border-border' : ''
+                  isLowStock ? 'border-destructive/50 bg-destructive/5' : ''
                 }`}
                 style={{ animationDelay: `${index * 50}ms` }}
               >

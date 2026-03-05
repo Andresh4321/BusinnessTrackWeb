@@ -1,9 +1,10 @@
 "use client";
 
+import { useEffect, useMemo, useState } from 'react';
 import { FileText, Package, DollarSign } from 'lucide-react';
 import { DashboardLayout } from '../dashboard/DashboardLayout';
 import { Card } from '@/components/ui/card';
-import { useApp } from '../context/AppContext';
+import { fetchInventoryMaterials, InventoryMaterial } from '@/lib/api/material';
 import {
   Table,
   TableBody,
@@ -14,8 +15,29 @@ import {
 } from '@/components/ui/table';
 
 const BillOfMaterials = () => {
-  const { materials, getTotalInventoryValue } = useApp();
-  const totalValue = getTotalInventoryValue();
+  const [materials, setMaterials] = useState<InventoryMaterial[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+        const inventory = await fetchInventoryMaterials();
+        setMaterials(inventory);
+      } catch (error) {
+        console.error('Failed to load bill of materials', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, []);
+
+  const totalValue = useMemo(
+    () => materials.reduce((total, m) => total + (m.quantity * m.costPerUnit), 0),
+    [materials]
+  );
 
   return (
     <DashboardLayout title="Bill of Materials" subtitle="Complete inventory valuation">
@@ -67,7 +89,11 @@ const BillOfMaterials = () => {
           <p className="text-sm text-muted-foreground">Detailed view of all materials and their values</p>
         </div>
 
-        {materials.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-16  ">
+            <p className="text-sm text-muted-foreground">Loading inventory...</p>
+          </div>
+        ) : materials.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16  ">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4 ">
               <FileText className="h-8 w-8 text-muted-foreground " />

@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useMemo, useState } from 'react';
 import { BarChart3, Package, Factory, TrendingDown, DollarSign, Calendar } from 'lucide-react';
 import { DashboardLayout } from '../dashboard/DashboardLayout';
 import { Card } from '@/components/ui/card';
-import { useApp } from '../context/AppContext';
 import { StatCard } from '../dashboard/_components/StatCard';
+import { reportsApi } from '@/lib/api/reports';
+import { InventoryMaterial } from '@/lib/api/material';
 import {
   AreaChart,
   Area,
@@ -22,34 +24,96 @@ import {
 
 const COLORS = ['hsl(25, 95%, 53%)', 'hsl(142, 76%, 36%)', 'hsl(38, 92%, 50%)', 'hsl(0, 84%, 60%)'];
 
+interface ReportBatch {
+  id: string;
+  status: 'ongoing' | 'completed';
+  quantity: number;
+  estimatedOutput?: number;
+  actualOutput?: number;
+  wastage?: number;
+  createdAt?: string;
+  completedAt?: string;
+}
+
+interface ReportStockLog {
+  id: string;
+  materialName: string;
+  type: 'add' | 'remove';
+  quantity: number;
+}
+
 const Reports = () => {
-  const { materials, batches, stockLogs, getTotalInventoryValue, getLowStockMaterials } = useApp();
+  const [materials, setMaterials] = useState<InventoryMaterial[]>([]);
+  const [batches, setBatches] = useState<ReportBatch[]>([]);
+  const [stockLogs, setStockLogs] = useState<ReportStockLog[]>([]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const snapshot = await reportsApi.getSnapshot();
+
+        setMaterials(snapshot.materials || []);
+        setBatches((snapshot.productions || []).map((item: any) => ({
+          id: item._id,
+          status: item.status,
+          quantity: item.batchQuantity || 0,
+          estimatedOutput: item.estimatedOutput || 0,
+          actualOutput: item.actualOutput || 0,
+          wastage: item.wastage || 0,
+          createdAt: item.created_at,
+          completedAt: item.updated_at,
+        })));
+        setStockLogs((snapshot.stockLogs || []).map((item: any) => ({
+          id: item._id,
+          materialName: item.material?.name || 'Unknown',
+          type: item.transaction_type === 'in' ? 'add' : 'remove',
+          quantity: item.quantity,
+        })));
+      } catch (error) {
+        console.error('Failed to load reports data', error);
+      }
+    };
+
+    load();
+  }, []);
 
   const completedBatches = batches.filter(b => b.status === 'completed');
   const avgWastage = completedBatches.length > 0
-    ? completedBatches.reduce((acc, b) => acc + (b.wastage || 0), 0) / completedBatches.length
+    ? completedBatches.reduce((acc, b) => {
+        const wastagePercent = b.estimatedOutput ? ((b.estimatedOutput - (b.actualOutput || 0)) / b.estimatedOutput) * 100 : 0;
+        return acc + wastagePercent;
+      }, 0) / completedBatches.length
     : 0;
 
   const totalProduction = completedBatches.reduce((acc, b) => acc + b.quantity, 0);
+  const totalInventoryValue = useMemo(
+    () => materials.reduce((total, item) => total + (item.quantity * item.costPerUnit), 0),
+    [materials]
+  );
+  const lowStockCount = useMemo(
+    () => materials.filter((item) => item.quantity <= item.minimumStock).length,
+    [materials]
+  );
 
-  // Generate mock daily data for charts
   const last7Days = Array.from({ length: 7 }, (_, i) => {
     const date = new Date();
     date.setDate(date.getDate() - (6 - i));
     const dayBatches = completedBatches.filter(b => {
-      const batchDate = new Date(b.completedAt || b.createdAt);
+      const batchDate = new Date(b.completedAt || b.createdAt || new Date().toISOString());
       return batchDate.toDateString() === date.toDateString();
     });
     return {
       name: date.toLocaleDateString('en-US', { weekday: 'short' }),
       production: dayBatches.reduce((acc, b) => acc + b.quantity, 0),
-      wastage: dayBatches.length > 0 
-        ? dayBatches.reduce((acc, b) => acc + (b.wastage || 0), 0) / dayBatches.length 
+      wastage: dayBatches.length > 0
+        ? dayBatches.reduce((acc, b) => {
+            const wastagePercent = b.estimatedOutput ? ((b.estimatedOutput - (b.actualOutput || 0)) / b.estimatedOutput) * 100 : 0;
+            return acc + wastagePercent;
+          }, 0) / dayBatches.length
         : 0,
     };
   });
 
-  // Material consumption data
   const materialConsumption = stockLogs
     .filter(log => log.type === 'remove')
     .reduce((acc, log) => {
@@ -62,7 +126,6 @@ const Reports = () => {
     .slice(0, 5)
     .map(([name, value]) => ({ name, value }));
 
-  // Stock distribution for pie chart
   const stockDistribution = materials.slice(0, 4).map(m => ({
     name: m.name,
     value: m.quantity * m.costPerUnit,
@@ -89,10 +152,10 @@ const Reports = () => {
         />
         <StatCard
           title="Low Stock Items"
-          value={getLowStockMaterials().length}
+          value={lowStockCount}
           subtitle="Need restocking"
           icon={TrendingDown}
-          variant={getLowStockMaterials().length > 0 ? 'danger' : 'success'}
+          variant={lowStockCount > 0 ? 'danger' : 'success'}
           delay={200}
         />
         <StatCard
@@ -290,7 +353,7 @@ const Reports = () => {
             <div className="flex items-center justify-between">
               <span className="font-medium">Total Inventory</span>
               <span className="font-display text-lg font-bold text-primary">
-                ${getTotalInventoryValue().toFixed(2)}
+                ${totalInventoryValue.toFixed(2)}
               </span>
             </div>
           </div>
@@ -299,7 +362,7 @@ const Reports = () => {
 
       {/* Additional Insights */}
       <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="p-6 bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20 opacity-0 animate-fade-in" style={{ animationDelay: '800ms' }}>
+        <Card className="p-6 bg-linear-to-br from-primary/10 to-primary/5 border-primary/20 opacity-0 animate-fade-in" style={{ animationDelay: '800ms' }}>
           <div className="flex items-center gap-3 mb-3">
             <DollarSign className="h-6 w-6 text-primary" />
             <h3 className="font-display font-semibold">Cost Insights</h3>
@@ -310,7 +373,7 @@ const Reports = () => {
           <p className="text-xs text-primary font-medium">💡 Tip: Add expense categories in future updates</p>
         </Card>
 
-        <Card className="p-6 bg-gradient-to-br from-success/10 to-success/5 border-success/20 opacity-0 animate-fade-in" style={{ animationDelay: '900ms' }}>
+        <Card className="p-6 bg-linear-to-br from-success/10 to-success/5 border-success/20 opacity-0 animate-fade-in" style={{ animationDelay: '900ms' }}>
           <div className="flex items-center gap-3 mb-3">
             <TrendingDown className="h-6 w-6 text-success" />
             <h3 className="font-display font-semibold">Wastage Reduction</h3>
@@ -323,7 +386,7 @@ const Reports = () => {
           </p>
         </Card>
 
-        <Card className="p-6 bg-gradient-to-br from-warning/10 to-warning/5 border-warning/20 opacity-0 animate-fade-in" style={{ animationDelay: '1000ms' }}>
+        <Card className="p-6 bg-linear-to-br from-warning/10 to-warning/5 border-warning/20 opacity-0 animate-fade-in" style={{ animationDelay: '1000ms' }}>
           <div className="flex items-center gap-3 mb-3">
             <Factory className="h-6 w-6 text-warning" />
             <h3 className="font-display font-semibold">Production Rate</h3>

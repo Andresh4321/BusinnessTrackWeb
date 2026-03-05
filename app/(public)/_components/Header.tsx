@@ -17,30 +17,34 @@ export default function Header() {
     const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname?.startsWith(href));
 
     return (
-        <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b border-border shadow-sm">
+        <header className="sticky top-0 z-50 border-b border-border/70 bg-background/75 backdrop-blur-2xl">
             <nav className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" aria-label="Global">
                 <div className="flex h-16 items-center justify-between md:grid md:grid-cols-[1fr_auto_1fr] w-full">
                     {/* Left: Logo */}
                     <div className="flex items-center gap-2">
                         <Link href="/" className="flex items-center gap-2 group">
-                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-foreground text-background font-semibold">
-                                B
-                            </span>
-                            <span className="text-base font-semibold tracking-tight group-hover:opacity-80 transition-opacity">
+                            <img 
+                                src="/logo.png" 
+                                alt="BusinessTrack Logo" 
+                                className="h-8 w-8 transition-transform duration-200 group-hover:scale-105"
+                            />
+                            <span className="text-base font-semibold tracking-tight text-foreground/95 group-hover:text-foreground transition-colors">
                                 BusinessTrack
                             </span>
                         </Link>
                     </div>
 
                     {/* Center: Desktop Nav */}
-                    <div className="hidden md:flex items-center gap-6 justify-self-center">
+                    <div className="hidden md:flex items-center gap-2 justify-self-center rounded-full border border-border/70 bg-muted/40 px-2 py-1">
                         {NAV_LINKS.map((link) => (
                             <Link
                                 key={link.href}
                                 href={link.href}
                                 className={
-                                    "text-sm font-medium transition-colors hover:text-foreground/80 " +
-                                    (isActive(link.href) ? "text-foreground" : "text-foreground/60")
+                                    "rounded-full px-4 py-1.5 text-sm font-medium transition-all " +
+                                    (isActive(link.href)
+                                        ? "bg-foreground text-background shadow-sm"
+                                        : "text-foreground/70 hover:text-foreground hover:bg-foreground/5")
                                 }
                             >
                                 {link.label}
@@ -53,13 +57,13 @@ export default function Header() {
                         <div className="hidden sm:flex items-center gap-2">
                             <Link
                                 href="/login"
-                                className="h-9 px-3 inline-flex items-center justify-center rounded-md border border-black/10 dark:border-white/15 text-sm font-medium hover:bg-foreground/5 transition-colors"
+                                className="h-9 px-4 inline-flex items-center justify-center rounded-full border border-border bg-background text-sm font-medium text-foreground/85 hover:text-foreground hover:bg-muted transition-colors"
                             >
                                 Log In
                             </Link>
                             <Link
                                 href="/register"
-                                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-foreground text-background text-sm font-semibold hover:opacity-90 transition-opacity"
+                                className="h-9 px-4 inline-flex items-center justify-center rounded-full bg-linear-to-r from-orange-500 to-orange-600 text-white text-sm font-semibold shadow-[0_8px_20px_rgba(249,115,22,0.35)] hover:brightness-105 transition-all"
                             >
                                 Get Started
                             </Link>
@@ -74,7 +78,7 @@ export default function Header() {
                             onClick={() => setOpen((v) => !v)}
                             aria-label="Toggle menu"
                             aria-expanded={open}
-                            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-md border border-black/10 dark:border-white/15 hover:bg-foreground/5 transition-colors"
+                            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background hover:bg-muted transition-colors"
                         >
                             {open ? (
                                 // Close icon
@@ -93,7 +97,7 @@ export default function Header() {
 
                 {/* Mobile panel */}
                 <div className={"md:hidden overflow-hidden transition-[max-height] duration-300 " + (open ? "max-h-96" : "max-h-0")}>
-                    <div className="pb-4 pt-2 border-t border-black/10 dark:border-white/10">
+                    <div className="pb-4 pt-2 border-t border-border/70">
                         <div className="flex flex-col gap-2">
                             {NAV_LINKS.map((link) => (
                                 <Link
@@ -101,8 +105,8 @@ export default function Header() {
                                     href={link.href}
                                     onClick={() => setOpen(false)}
                                     className={
-                                        "rounded-md px-2 py-2 text-sm font-medium transition-colors hover:bg-foreground/5 " +
-                                        (isActive(link.href) ? "text-foreground" : "text-foreground/70")
+                                        "rounded-md px-2 py-2 text-sm font-medium transition-colors hover:bg-muted " +
+                                        (isActive(link.href) ? "text-foreground bg-foreground/5" : "text-foreground/70")
                                     }
                                 >
                                     {link.label}
@@ -112,13 +116,13 @@ export default function Header() {
                             <div className="mt-2 flex items-center gap-2">
                                 <Link
                                     href="/login"
-                                    className="flex-1 h-9 px-3 inline-flex items-center justify-center rounded-md border border-black/10 dark:border-white/15 text-sm font-medium hover:bg-foreground/5 transition-colors"
+                                    className="flex-1 h-9 px-3 inline-flex items-center justify-center rounded-full border border-border text-sm font-medium hover:bg-muted transition-colors"
                                 >
                                     Log In
                                 </Link>
                                 <Link
                                     href="/register"
-                                    className="flex-1 h-9 px-3 inline-flex items-center justify-center rounded-md bg-foreground text-background text-sm font-semibold hover:opacity-90 transition-opacity"
+                                    className="flex-1 h-9 px-3 inline-flex items-center justify-center rounded-full bg-linear-to-r from-orange-500 to-orange-600 text-white text-sm font-semibold shadow-[0_8px_20px_rgba(249,115,22,0.35)] hover:brightness-105 transition-all"
                                 >
                                     Get Started
                                 </Link>

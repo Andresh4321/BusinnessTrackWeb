@@ -12,7 +12,9 @@ import {
   Factory,
   BarChart3,
   LogOut,
-  Settings
+  Settings,
+  MessageCircle,
+  Bell
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -22,7 +24,9 @@ const navigation = [
   { name: 'Bill of Materials', href: '/BillOfMaterials', icon: FileText },
   { name: 'Stock Management', href: '/StockManagement', icon: Boxes },
   { name: 'Suppliers', href: '/Suppliers', icon: Users },
+  { name: 'Messages', href: '/Messaging', icon: MessageCircle },
   { name: 'Low Stock Alerts', href: '/LowStockAlerts', icon: AlertTriangle },
+  { name: 'Notifications', href: '/Notifications', icon: Bell },
   { name: 'Production', href: '/Production', icon: Factory },
   { name: 'Reports & Analytics', href: '/Reports', icon: BarChart3 },
 ];
@@ -67,12 +71,12 @@ export const Sidebar = () => {
                 style={{ animationDelay: `${index * 50}ms` }}
               >
                 <item.icon className={cn(
-                  "h-5 w-5 flex-shrink-0 transition-colors",
+                  "h-5 w-5 shrink-0 transition-colors",
                   isActive ? "text-sidebar-primary" : "text-sidebar-foreground/70 group-hover:text-sidebar-foreground"
                 )} />
                 <span className="flex-1">{item.name}</span>
                 {item.name === 'Low Stock Alerts' && (
-                  <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground flex-shrink-0">
+                  <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground shrink-0">
                     !
                   </span>
                 )}

@@ -305,7 +305,7 @@ const Settings = () => {
                 <p className="font-medium">Password</p>
                 <p className="text-sm text-muted-foreground">••••••••</p>
               </div>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={() => window.location.href = '/auth/reset-password'}>
                 Change Password
               </Button>
             </div>

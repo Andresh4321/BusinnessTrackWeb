@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Search, Bell } from 'lucide-react';
+import { Bell, Sparkles } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { useApp } from '../context/AppContext';
+import { fetchInventoryMaterials } from '@/lib/api/material';
+import { messagingApi } from '@/lib/api/messaging';
 
 interface HeaderProps {
   title: string;
@@ -12,9 +13,10 @@ interface HeaderProps {
 }
 
 export const Header = ({ title, subtitle }: HeaderProps) => {
-  const { getLowStockMaterials } = useApp();
-  const lowStockCount = getLowStockMaterials().length;
+  const [lowStockCount, setLowStockCount] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
   const [user, setUser] = useState<any>(null);
+  const router = useRouter();
 
   const resolveProfileImageUrl = (src?: string) => {
     if (!src) return "";
@@ -26,11 +28,40 @@ export const Header = ({ title, subtitle }: HeaderProps) => {
   };
 
   useEffect(() => {
+    const loadHeaderData = async () => {
+      try {
+        // Load low stock count
+        const inventory = await fetchInventoryMaterials();
+        setLowStockCount(inventory.filter((m) => m.quantity <= m.minimumStock).length);
+
+        // Load unread message count
+        try {
+          const msgResponse = await messagingApi.getUnreadCount();
+          setUnreadMessages(msgResponse.data?.data?.unreadCount || 0);
+        } catch (error) {
+          console.error('Failed to load unread messages', error);
+        }
+      } catch (error) {
+        console.error('Failed to load header data', error);
+      }
+    };
+
     // Load user from localStorage
     const userData = localStorage.getItem('businesstrack_user') || localStorage.getItem('user');
     if (userData) {
       setUser(JSON.parse(userData));
     }
+
+    loadHeaderData();
+
+    // Refresh unread count every 30 seconds
+    const interval = setInterval(() => {
+      messagingApi.getUnreadCount()
+        .then(res => setUnreadMessages(res.data?.data?.unreadCount || 0))
+        .catch(err => console.error('Failed to refresh unread count', err));
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const profileSrc = resolveProfileImageUrl(user?.profileImage);
@@ -46,19 +77,26 @@ export const Header = ({ title, subtitle }: HeaderProps) => {
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="relative hidden md:block">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input 
-            placeholder="Search..." 
-            className="w-64 pl-9 bg-muted/50 border-0"
-          />
-        </div>
+        <Button 
+          variant="outline" 
+          className="hidden md:flex gap-2 bg-linear-to-r from-purple-500/10 to-blue-500/10 hover:from-purple-500/20 hover:to-blue-500/20 border-purple-500/30"
+          onClick={() => router.push('/AIAssistant')}
+        >
+          <Sparkles className="h-4 w-4 text-purple-500" />
+          View with AI
+        </Button>
 
-        <Button variant="ghost" size="icon" className="relative">
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="relative"
+          onClick={() => router.push('/Notifications')}
+          title="Notifications"
+        >
           <Bell className="h-5 w-5" />
-          {lowStockCount > 0 && (
+          {(lowStockCount > 0 || unreadMessages > 0) && (
             <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground animate-pulse">
-              {lowStockCount}
+              {Math.min((lowStockCount > 0 ? 1 : 0) + (unreadMessages > 0 ? 1 : 0), 9)}
             </span>
           )}
         </Button>

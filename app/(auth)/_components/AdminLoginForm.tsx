@@ -28,8 +28,8 @@ export default function AdminLoginForm() {
             const result = await adminLogin({ ...data, role: "admin" });
 
             if (result && result.success === false) {
-                console.error("Admin login failed response:", result);
-                throw new Error(result.message || "Login failed");
+                setError(result.message || "Access denied: Admins only");
+                return;
             }
 
             const user = result?.data?.user ?? result?.user ?? result?.data ?? result;
@@ -37,17 +37,18 @@ export default function AdminLoginForm() {
             const role = user?.role ?? undefined;
 
             if (!user || Object.keys(user).length === 0) {
-                console.error("Admin login returned empty user:", result);
-                throw new Error("Login succeeded but server returned no user data.");
+                setError("Login succeeded but server returned no user data.");
+                return;
             }
 
             if (!role) {
-                console.error("Admin login returned user without role:", result);
-                throw new Error("Login succeeded but role information is missing from response.");
+                setError("Login succeeded but role information is missing from response.");
+                return;
             }
 
             if (role !== "admin") {
-                throw new Error("Access denied: You do not have admin access.");
+                setError("Access denied: You do not have admin access.");
+                return;
             }
 
             // Persist token and user on client so subsequent API calls include Authorization header
@@ -55,8 +56,8 @@ export default function AdminLoginForm() {
                 try {
                     setAuthTokenClient(token);
                     localStorage.setItem("user", JSON.stringify(user));
-                } catch (e) {
-                    console.warn("Could not persist auth token locally:", e);
+                } catch {
+                    // ignore storage warnings for login flow
                 }
             }
 
@@ -66,10 +67,9 @@ export default function AdminLoginForm() {
             });
 
         } catch (err: any) {
-            console.error("Admin login error:", err);
             const msg = String(err?.message ?? err);
             if (msg.includes("Network Error") || msg.includes("could not reach backend")) {
-                setError("Network Error: unable to reach backend. Check NEXT_PUBLIC_BACKEND_URL and CORS. See console for details.");
+                setError("Network Error: unable to reach backend. Check NEXT_PUBLIC_BACKEND_URL and CORS.");
             } else {
                 setError(msg || "Login failed");
             }

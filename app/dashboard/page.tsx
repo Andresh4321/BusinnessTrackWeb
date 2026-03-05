@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useState } from 'react';
 import { 
   Package, 
   AlertTriangle, 
@@ -12,17 +13,66 @@ import {
 } from 'lucide-react';
 import { DashboardLayout } from './DashboardLayout';
 import { StatCard } from './_components/StatCard';
-import { useApp } from '../context/AppContext';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
+import { fetchInventoryMaterials, InventoryMaterial } from '@/lib/api/material';
+import { productionAPI } from '@/lib/api/production';
+
+interface DashboardBatch {
+  id: string;
+  recipeName: string;
+  quantity: number;
+  estimatedOutput: number;
+  wastage?: number;
+  status: 'ongoing' | 'completed';
+  createdAt?: string;
+  completedAt?: string;
+}
 
 const Dashboard = () => {
   const router = useRouter();
-  const { materials, batches, getLowStockMaterials, getTotalInventoryValue } = useApp();
-  
-  const lowStockItems = getLowStockMaterials();
-  const inventoryValue = getTotalInventoryValue();
+  const [materials, setMaterials] = useState<InventoryMaterial[]>([]);
+  const [batches, setBatches] = useState<DashboardBatch[]>([]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [inventory, productionRes] = await Promise.all([
+          fetchInventoryMaterials(),
+          productionAPI.getAll(),
+        ]);
+
+        const rawProductions = productionRes.data?.data || [];
+        const mappedBatches: DashboardBatch[] = rawProductions.map((item: any) => ({
+          id: item._id,
+          recipeName: item.recipe?.name || 'Unknown Recipe',
+          quantity: item.batchQuantity || 0,
+          estimatedOutput: item.estimatedOutput || 0,
+          wastage: item.wastage || 0,
+          status: item.status,
+          createdAt: item.created_at,
+          completedAt: item.updated_at,
+        }));
+
+        setMaterials(inventory);
+        setBatches(mappedBatches);
+      } catch (error) {
+        console.error('Failed to load dashboard data', error);
+      }
+    };
+
+    load();
+  }, []);
+
+  const lowStockItems = useMemo(
+    () => materials.filter((m) => m.quantity <= m.minimumStock),
+    [materials]
+  );
+  const inventoryValue = useMemo(
+    () => materials.reduce((total, m) => total + (m.quantity * m.costPerUnit), 0),
+    [materials]
+  );
   const activeBatches = batches.filter(b => b.status === 'ongoing').length;
   const completedBatches = batches.filter(b => b.status === 'completed');
   const avgWastage = completedBatches.length > 0

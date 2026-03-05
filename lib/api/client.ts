@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000') + '/api';
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -9,9 +9,9 @@ export const apiClient: AxiosInstance = axios.create({
   },
 });
 
-// Add token to headers if available
+// Add token to headers if available - using 'auth_token' which is set by login
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('auth_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -22,8 +22,7 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
+    if (error.response?.status === 401) {      console.error('Unauthorized - clearing auth and redirecting to login');      localStorage.removeItem('auth_token');
       localStorage.removeItem('user');
       window.location.href = '/login';
     }

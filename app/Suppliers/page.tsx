@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from 'react';
-import { Users, Plus, Search, Star, Phone, Mail, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Users, Plus, Search, Star, Phone, Mail, Trash2, MessageCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '../dashboard/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { useApp } from '../context/AppContext';
 import { useToast } from '../hooks/use-toast';
+import { supplierApi } from '@/lib/api/suppliers';
+import { messagingApi } from '@/lib/api/messaging';
 import {
   Dialog,
   DialogContent,
@@ -16,11 +18,26 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 
+interface Supplier {
+  id: string;
+  name: string;
+  email: string;
+  contactNumber: string;
+  products: string[];
+  createdAt: string;
+}
+
 const Suppliers = () => {
-  const { suppliers, addSupplier, updateSupplier, deleteSupplier } = useApp();
   const { toast } = useToast();
+  const router = useRouter();
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [messagingSupplier, setMessagingSupplier] = useState<Supplier | null>(null);
+  const [messageLoading, setMessageLoading] = useState(false);
+  const [messageError, setMessageError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     contactNumber: '',
@@ -28,7 +45,36 @@ const Suppliers = () => {
     products: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    loadSuppliers();
+  }, []);
+
+  const loadSuppliers = async () => {
+    try {
+      setLoading(true);
+      const response = await supplierApi.getAll();
+      const rows = response.data?.data || [];
+      const mapped: Supplier[] = rows.map((item: any) => ({
+        id: item._id,
+        name: item.name,
+        email: item.email,
+        contactNumber: item.contact_number,
+        products: item.products || [],
+        createdAt: item.createdAt,
+      }));
+      setSuppliers(mapped);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to load suppliers',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name || !formData.contactNumber || !formData.email) {
@@ -40,26 +86,88 @@ const Suppliers = () => {
       return;
     }
 
-    addSupplier({
-      name: formData.name,
-      contactNumber: formData.contactNumber,
-      email: formData.email,
-      products: formData.products.split(',').map(p => p.trim()).filter(Boolean),
-      prices: {},
-      isFavorite: false,
-    });
+    try {
+      await supplierApi.create({
+        name: formData.name,
+        email: formData.email,
+        contact_number: formData.contactNumber,
+        products: formData.products.split(',').map(p => p.trim()).filter(Boolean),
+      });
 
-    toast({
-      title: "Success",
-      description: "Supplier added successfully",
-    });
+      toast({
+        title: 'Success',
+        description: 'Supplier added successfully',
+      });
 
-    setFormData({ name: '', contactNumber: '', email: '', products: '' });
-    setIsOpen(false);
+      setFormData({ name: '', contactNumber: '', email: '', products: '' });
+      setIsOpen(false);
+      await loadSuppliers();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to add supplier',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const toggleFavorite = (id: string, current: boolean) => {
-    updateSupplier(id, { isFavorite: !current });
+  const toggleFavorite = (id: string) => {
+    setFavoriteIds((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await supplierApi.delete(id);
+      toast({ title: 'Deleted', description: 'Supplier removed' });
+      await loadSuppliers();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to delete supplier',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleMessageSupplier = async (supplier: Supplier) => {
+    try {
+      setMessagingSupplier(supplier);
+      setMessageError(null);
+      setMessageLoading(true);
+
+      // Check if supplier email exists as a user
+      const checkResponse = await messagingApi.checkUserExists(supplier.email);
+
+      if (!checkResponse.data?.success) {
+        setMessageError(`${supplier.email} is not registered in the app`);
+        toast({
+          title: 'User Not Found',
+          description: `${supplier.email} is not registered in the app`,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Get or create conversation
+      const convResponse = await messagingApi.getOrCreateConversation(supplier.email);
+      
+      // Navigate to Messaging page with conversation ID
+      router.push(`/Messaging`);
+      
+      toast({
+        title: 'Success',
+        description: 'Opening conversation...',
+      });
+    } catch (error: any) {
+      setMessageError(error.message || 'Failed to start conversation');
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to start conversation',
+        variant: 'destructive',
+      });
+    } finally {
+      setMessageLoading(false);
+    }
   };
 
   const filteredSuppliers = suppliers.filter(supplier => {
@@ -73,8 +181,10 @@ const Suppliers = () => {
 
   // Sort: favorites first, then by date
   const sortedSuppliers = [...filteredSuppliers].sort((a, b) => {
-    if (a.isFavorite && !b.isFavorite) return -1;
-    if (!a.isFavorite && b.isFavorite) return 1;
+    const aFav = favoriteIds.includes(a.id);
+    const bFav = favoriteIds.includes(b.id);
+    if (aFav && !bFav) return -1;
+    if (!aFav && bFav) return 1;
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
@@ -98,45 +208,70 @@ const Suppliers = () => {
               Add Supplier
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle className="font-display">Add New Supplier</DialogTitle>
+              <DialogTitle className="font-display text-xl">✨ Add New Supplier</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Supplier Name</label>
+            <form onSubmit={handleSubmit} className="space-y-6 mt-6">
+              {/* Supplier Name */}
+              <div className="space-y-3">
+                <label className="text-sm font-semibold flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">1</span>
+                  Supplier Name
+                </label>
                 <Input
                   placeholder="e.g., Fresh Farms Co."
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="h-10"
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Contact Number</label>
-                <Input
-                  placeholder="e.g., +1 234 567 8900"
-                  value={formData.contactNumber}
-                  onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
-                />
+
+              {/* Contact & Email */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <label className="text-sm font-semibold flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">2</span>
+                    Contact Number
+                  </label>
+                  <Input
+                    placeholder="e.g., +1 234 567 8900"
+                    value={formData.contactNumber}
+                    onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
+                    className="h-10"
+                  />
+                </div>
+                <div className="space-y-3">
+                  <label className="text-sm font-semibold flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">3</span>
+                    Email
+                  </label>
+                  <Input
+                    type="email"
+                    placeholder="supplier@example.com"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="h-10"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Email</label>
-                <Input
-                  type="email"
-                  placeholder="supplier@example.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Products (comma separated)</label>
+
+              {/* Products */}
+              <div className="space-y-3">
+                <label className="text-sm font-semibold flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">4</span>
+                  Products (comma separated)
+                </label>
                 <Input
                   placeholder="e.g., Eggs, Flour, Sugar"
                   value={formData.products}
                   onChange={(e) => setFormData({ ...formData, products: e.target.value })}
+                  className="h-10"
                 />
               </div>
-              <div className="flex gap-3 pt-4">
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-6 border-t border-border">
                 <Button type="button" variant="outline" className="flex-1" onClick={() => setIsOpen(false)}>
                   Cancel
                 </Button>
@@ -160,7 +295,11 @@ const Suppliers = () => {
         />
       </div>
 
-      {sortedSuppliers.length === 0 ? (
+      {loading ? (
+        <Card className="flex flex-col items-center justify-center py-16 ">
+          <p className="text-muted-foreground">Loading suppliers...</p>
+        </Card>
+      ) : sortedSuppliers.length === 0 ? (
         <Card className="flex flex-col items-center justify-center py-16 ">
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted mb-6 ">
             <Users className="h-10 w-10 text-muted-foreground" />
@@ -201,18 +340,15 @@ const Suppliers = () => {
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8"
-                    onClick={() => toggleFavorite(supplier.id, supplier.isFavorite)}
+                    onClick={() => toggleFavorite(supplier.id)}
                   >
-                    <Star className={`h-4 w-4 ${supplier.isFavorite ? 'fill-warning text-warning' : ''}`} />
+                    <Star className={`h-4 w-4 ${favoriteIds.includes(supplier.id) ? 'fill-warning text-warning' : ''}`} />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                    onClick={() => {
-                      deleteSupplier(supplier.id);
-                      toast({ title: "Deleted", description: "Supplier removed" });
-                    }}
+                    onClick={() => handleDelete(supplier.id)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -242,6 +378,29 @@ const Suppliers = () => {
                   </div>
                 </div>
               )}
+
+              {/* Message Button */}
+              <div className="pt-4 border-t border-border">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => handleMessageSupplier(supplier)}
+                  disabled={messageLoading && messagingSupplier?.id === supplier.id}
+                >
+                  {messageLoading && messagingSupplier?.id === supplier.id ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Checking...
+                    </>
+                  ) : (
+                    <>
+                      <MessageCircle className="h-4 w-4 mr-2" />
+                      Message Supplier
+                    </>
+                  )}
+                </Button>
+              </div>
             </Card>
           ))}
         </div>

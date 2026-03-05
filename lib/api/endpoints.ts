@@ -56,6 +56,18 @@ export const suppliersAPI = {
   getById: (id: string) => apiClient.get(`/suppliers/${id}`),
   update: (id: string, data: any) => apiClient.put(`/suppliers/${id}`, data),
   delete: (id: string) => apiClient.delete(`/suppliers/${id}`),
+  getByProduct: (product: string) => apiClient.get(`/suppliers/by-product/search?product=${encodeURIComponent(product)}`),
+};
+
+// ==================== MESSAGING ENDPOINTS ====================
+export const messagingAPI = {
+  checkUserExists: (email: string) => apiClient.post('/messages/check-user', { email }),
+  getOrCreateConversation: (receiverEmail: string) => 
+    apiClient.post('/messages/conversation', { receiverEmail }),
+  sendMessage: (data: any) => apiClient.post('/messages/send', data),
+  getConversation: (conversationId: string) => apiClient.get(`/messages/${conversationId}`),
+  getConversationsList: () => apiClient.get('/messages'),
+  getUnreadCount: () => apiClient.get('/messages/count/unread'),
 };
 
 // ==================== ADMIN ENDPOINTS ====================
