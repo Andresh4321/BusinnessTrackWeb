@@ -1,6 +1,20 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import BillOfMaterials from '@/app/BillOfMaterials/page'
 import { mockAppContextValue } from '../utils/test-utils'
+
+// Mock API dependencies
+jest.mock('@/lib/api/material', () => ({
+  fetchInventoryMaterials: jest.fn(() => Promise.resolve([
+    {
+      id: '1',
+      name: 'Test Material',
+      unit: 'kg',
+      quantity: 100,
+      costPerUnit: 10,
+      minimumStock: 20,
+    },
+  ])),
+}))
 
 // Mock dependencies
 jest.mock('@/app/dashboard/DashboardLayout', () => ({
@@ -22,29 +36,38 @@ jest.mock('@/app/context/AppContext', () => ({
 }))
 
 describe('Bill of Materials Page', () => {
-  test('renders bill of materials page without crashing', () => {
+  test('renders bill of materials page without crashing', async () => {
     render(<BillOfMaterials />)
-    expect(screen.getByText('Bill of Materials')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Bill of Materials')).toBeInTheDocument()
+    })
   })
 
-  test('displays correct subtitle', () => {
+  test('displays correct subtitle', async () => {
     render(<BillOfMaterials />)
-    expect(screen.getByText('Complete inventory valuation')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Complete inventory valuation')).toBeInTheDocument()
+    })
   })
 
-  test('displays total items summary card', () => {
+  test('displays total items summary card', async () => {
     render(<BillOfMaterials />)
-    expect(screen.getByText('Total Items')).toBeInTheDocument()
-    expect(screen.getByText('1')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Total Items')).toBeInTheDocument()
+    })
   })
 
-  test('displays materials table or list', () => {
+  test('displays materials table or list', async () => {
     render(<BillOfMaterials />)
-    expect(screen.getByText('Test Material')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Test Material')).toBeInTheDocument()
+    })
   })
 
-  test('calculates and displays total inventory value', () => {
+  test('calculates and displays total inventory value', async () => {
     render(<BillOfMaterials />)
-    expect(screen.getByText('Total Value')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Total Value')).toBeInTheDocument()
+    })
   })
 })

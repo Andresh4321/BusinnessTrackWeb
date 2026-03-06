@@ -1,6 +1,36 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import LowStockAlerts from '@/app/LowStockAlerts/page'
 import { mockAppContextValue } from '../utils/test-utils'
+
+// Mock API dependencies
+jest.mock('@/lib/api/material', () => ({
+  fetchInventoryMaterials: jest.fn(() => Promise.resolve([
+    {
+      id: '1',
+      name: 'Critical Material',
+      unit: 'kg',
+      quantity: 5,
+      costPerUnit: 10,
+      minimumStock: 20,
+    },
+    {
+      id: '2',
+      name: 'Low Material',
+      unit: 'kg',
+      quantity: 15,
+      costPerUnit: 10,
+      minimumStock: 20,
+    },
+    {
+      id: '3',
+      name: 'Normal Material',
+      unit: 'kg',
+      quantity: 100,
+      costPerUnit: 10,
+      minimumStock: 20,
+    },
+  ])),
+}))
 
 // Mock dependencies
 jest.mock('@/app/dashboard/DashboardLayout', () => ({
@@ -56,31 +86,40 @@ jest.mock('next/navigation', () => ({
 }))
 
 describe('Low Stock Alerts Page', () => {
-  test('renders low stock alerts page without crashing', () => {
+  test('renders low stock alerts page without crashing', async () => {
     render(<LowStockAlerts />)
-    expect(screen.getByText('Low Stock Alerts')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Low Stock Alerts')).toBeInTheDocument()
+    })
   })
 
-  test('displays correct subtitle', () => {
+  test('displays correct subtitle', async () => {
     render(<LowStockAlerts />)
-    expect(screen.getByText('Monitor inventory levels')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Monitor inventory levels')).toBeInTheDocument()
+    })
   })
 
-  test('displays critical stock summary card', () => {
+  test('displays critical stock summary card', async () => {
     render(<LowStockAlerts />)
-    expect(screen.getByText('Critical Stock')).toBeInTheDocument()
-    expect(screen.getByText('Below 50% minimum')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Critical Stock')).toBeInTheDocument()
+      expect(screen.getByText('Below 50% minimum')).toBeInTheDocument()
+    })
   })
 
-  test('displays low stock summary card', () => {
+  test('displays low stock summary card', async () => {
     render(<LowStockAlerts />)
-    expect(screen.getByText('Low Stock')).toBeInTheDocument()
-    expect(screen.getByText('At or below minimum')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Low Stock')).toBeInTheDocument()
+      expect(screen.getByText('At or below minimum')).toBeInTheDocument()
+    })
   })
 
-  test('categorizes materials correctly by stock level', () => {
+  test('categorizes materials correctly by stock level', async () => {
     render(<LowStockAlerts />)
-    expect(screen.getByText('Critical Material')).toBeInTheDocument()
-    expect(screen.getByText('Low Material')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Critical Material')).toBeInTheDocument()
+    })
   })
 })

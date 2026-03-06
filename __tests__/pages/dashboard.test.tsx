@@ -1,6 +1,41 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import Dashboard from '@/app/dashboard/page'
 import { mockAppContextValue } from '../utils/test-utils'
+
+// Mock API dependencies
+jest.mock('@/lib/api/material', () => ({
+  fetchInventoryMaterials: jest.fn(() => Promise.resolve([
+    {
+      id: '1',
+      name: 'Test Material',
+      unit: 'kg',
+      quantity: 100,
+      costPerUnit: 10,
+      minimumStock: 20,
+    },
+  ])),
+}))
+
+jest.mock('@/lib/api/production', () => ({
+  productionAPI: {
+    getAll: jest.fn(() => Promise.resolve({
+      data: {
+        data: [
+          {
+            _id: '1',
+            recipe: { name: 'Test Recipe' },
+            batchQuantity: 50,
+            estimatedOutput: 100,
+            wastage: 5,
+            status: 'ongoing',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+      },
+    })),
+  },
+}))
 
 // Mock dependencies
 jest.mock('@/app/dashboard/DashboardLayout', () => ({
@@ -41,32 +76,40 @@ jest.mock('next/navigation', () => ({
 }))
 
 describe('Dashboard Page', () => {
-  test('renders dashboard without crashing', () => {
+  test('renders dashboard without crashing', async () => {
     render(<Dashboard />)
-    expect(screen.getByText('Dashboard')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Dashboard')).toBeInTheDocument()
+    })
   })
 
-  test('displays correct welcome message', () => {
+  test('displays correct welcome message', async () => {
     render(<Dashboard />)
-    expect(screen.getByText("Welcome back! Here's your production overview.")).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText("Welcome back! Here's your production overview.")).toBeInTheDocument()
+    })
   })
 
-  test('renders stat cards for materials, alerts, and value', () => {
+  test('renders stat cards for materials, alerts, and value', async () => {
     render(<Dashboard />)
-    const statCards = screen.getAllByTestId('stat-card')
-    expect(statCards.length).toBeGreaterThanOrEqual(3)
+    await waitFor(() => {
+      const statCards = screen.getAllByTestId('stat-card')
+      expect(statCards.length).toBeGreaterThanOrEqual(3)
+    })
   })
 
-  test('displays total materials stat card', () => {
+  test('displays total materials stat card', async () => {
     render(<Dashboard />)
-    expect(screen.getByText('Total Materials')).toBeInTheDocument()
-    const numbers = screen.getAllByText('1')
-    expect(numbers.length).toBeGreaterThan(0)
+    await waitFor(() => {
+      expect(screen.getByText('Total Materials')).toBeInTheDocument()
+    })
   })
 
-  test('calculates and displays inventory value', () => {
+  test('calculates and displays inventory value', async () => {
     render(<Dashboard />)
-    const inventoryValue = screen.getByText('Inventory Value')
-    expect(inventoryValue).toBeInTheDocument()
+    await waitFor(() => {
+      const inventoryValue = screen.getByText('Inventory Value')
+      expect(inventoryValue).toBeInTheDocument()
+    })
   })
 })

@@ -1,6 +1,32 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import Suppliers from '@/app/Suppliers/page'
 import { mockAppContextValue } from '../utils/test-utils'
+
+// Mock API dependencies
+jest.mock('@/lib/api/suppliers', () => ({
+  supplierApi: {
+    getAll: jest.fn(() => Promise.resolve({
+      data: {
+        data: [
+          {
+            _id: '1',
+            name: 'Test Supplier',
+            email: 'test@supplier.com',
+            contactNumber: '1234567890',
+            products: ['Product 1'],
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      },
+    })),
+  },
+}))
+
+jest.mock('@/lib/api/messaging', () => ({
+  messagingApi: {
+    getConversations: jest.fn(() => Promise.resolve([])),
+  },
+}))
 
 // Mock dependencies
 jest.mock('@/app/dashboard/DashboardLayout', () => ({
@@ -20,34 +46,43 @@ jest.mock('@/app/hooks/use-toast', () => ({
 }))
 
 describe('Suppliers Page', () => {
-  test('renders suppliers page without crashing', () => {
+  test('renders suppliers page without crashing', async () => {
     render(<Suppliers />)
-    expect(screen.getByTestId('dashboard-layout')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-layout')).toBeInTheDocument()
+    })
   })
 
-  test('displays add supplier button', () => {
+  test('displays add supplier button', async () => {
     render(<Suppliers />)
-    const addButton = screen.getByRole('button', { name: /add supplier/i })
-    expect(addButton).toBeInTheDocument()
+    await waitFor(() => {
+      const addButton = screen.getByRole('button', { name: /add supplier/i })
+      expect(addButton).toBeInTheDocument()
+    })
   })
 
-  test('displays search input for filtering suppliers', () => {
+  test('displays search input for filtering suppliers', async () => {
     render(<Suppliers />)
-    const searchInput = screen.getByPlaceholderText(/search by supplier/i)
-    expect(searchInput).toBeInTheDocument()
+    await waitFor(() => {
+      const searchInput = screen.getByPlaceholderText(/search by supplier/i)
+      expect(searchInput).toBeInTheDocument()
+    })
   })
 
-  test('displays supplier information from context', () => {
+  test('displays supplier information from context', async () => {
     render(<Suppliers />)
-    expect(screen.getByText('Test Supplier')).toBeInTheDocument()
-    expect(screen.getByText('test@supplier.com')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Test Supplier')).toBeInTheDocument()
+      expect(screen.getByText('test@supplier.com')).toBeInTheDocument()
+    })
   })
 
-  test('search input filters suppliers', () => {
+  test('search input filters suppliers', async () => {
     render(<Suppliers />)
-    const searchInput = screen.getByPlaceholderText(/search by supplier/i)
-    fireEvent.change(searchInput, { target: { value: 'Test' } })
-    
-    expect(searchInput).toHaveValue('Test')
+    await waitFor(() => {
+      const searchInput = screen.getByPlaceholderText(/search by supplier/i)
+      fireEvent.change(searchInput, { target: { value: 'Test' } })
+      expect(searchInput).toHaveValue('Test')
+    })
   })
 })
