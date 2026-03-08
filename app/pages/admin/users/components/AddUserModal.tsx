@@ -3,7 +3,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createAdminUser } from "@/lib/api/auth";
-import { registerSchema, RegisterData } from "@/app/(auth)/schema";
+import { registerSchema, RegisterData } from "@/app/pages/(auth)/schema";
 import { X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 

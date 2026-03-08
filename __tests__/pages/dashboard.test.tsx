@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import Dashboard from '@/app/dashboard/page'
+import Dashboard from '@/app/pages/dashboard/page'
 import { mockAppContextValue } from '../utils/test-utils'
 
 // Mock API dependencies

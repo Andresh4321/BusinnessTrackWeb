@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { User, Camera, Mail, Phone, MapPin, Building, Save } from 'lucide-react';
-import { useToast } from '../hooks/use-toast';
+import { useToast } from '@/app/hooks/use-toast';
 import { uploadProfilePhoto, updateProfile } from '@/lib/api/auth';
 
 const Settings = () => {

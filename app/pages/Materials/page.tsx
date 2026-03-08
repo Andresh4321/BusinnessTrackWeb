@@ -6,8 +6,9 @@ import { DashboardLayout } from '../dashboard/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { useToast } from '../hooks/use-toast';
+import { useToast } from '../../hooks/use-toast';
 import { materialsAPI, stockAPI } from '@/lib/api/endpoints';
+import { triggerDashboardRefresh } from '@/lib/utils/dashboardRefresh';
 import {
   Dialog,
   DialogContent,
@@ -144,6 +145,8 @@ const Materials = () => {
       
       // Refresh the materials list
       await fetchMaterials();
+      triggerDashboardRefresh();
+      triggerDashboardRefresh();
     } catch (error: any) {
       console.error('Failed to create material:', error);
       toast({
@@ -165,6 +168,7 @@ const Materials = () => {
       
       // Refresh the materials list
       await fetchMaterials();
+      triggerDashboardRefresh();
     } catch (error: any) {
       console.error('Failed to delete material:', error);
       toast({

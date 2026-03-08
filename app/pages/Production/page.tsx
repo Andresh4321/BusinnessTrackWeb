@@ -6,8 +6,9 @@ import { DashboardLayout } from '../dashboard/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { useToast } from '../hooks/use-toast';
+import { useToast } from '../../hooks/use-toast';
 import { fetchInventoryMaterials, InventoryMaterial } from '@/lib/api/material';
+import { triggerDashboardRefresh } from '@/lib/utils/dashboardRefresh';
 import {
   Dialog,
   DialogContent,
@@ -300,6 +301,7 @@ const Production = () => {
         setBatchForm({ recipeId: '', quantity: '', estimatedOutput: '' });
         setIsBatchOpen(false);
         await loadData();
+        triggerDashboardRefresh();
       } else {
         toast({
           title: "Error",
@@ -332,6 +334,7 @@ const Production = () => {
         setActualOutput('');
         setIsCompleteOpen(false);
         await loadData();
+        triggerDashboardRefresh();
       } else {
         toast({
           title: "Error",

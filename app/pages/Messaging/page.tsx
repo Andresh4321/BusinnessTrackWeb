@@ -6,7 +6,7 @@ import { DashboardLayout } from '../dashboard/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { useToast } from '../hooks/use-toast';
+import { useToast } from '../../hooks/use-toast';
 import { messagingApi } from '@/lib/api/messaging';
 import { useAuth } from '@/app/context/AuthContext';
 import {

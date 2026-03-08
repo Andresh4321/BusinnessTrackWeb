@@ -6,7 +6,7 @@ import { getAdminUser } from "@/lib/api/auth";
 import { ArrowLeft, Mail, Phone, Shield, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
-import AdminLayout from "@/app/admin/AdminLayout";
+import AdminLayout from "@/app/pages/admin/AdminLayout";
 
 export const dynamic = "force-dynamic";
 

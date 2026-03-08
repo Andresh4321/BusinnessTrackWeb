@@ -9,7 +9,8 @@ import {
   TrendingUp,
   ArrowUpRight,
   ArrowDownRight,
-  Layers
+  Layers,
+  RefreshCw
 } from 'lucide-react';
 import { DashboardLayout } from './DashboardLayout';
 import { StatCard } from './_components/StatCard';
@@ -34,35 +35,79 @@ const Dashboard = () => {
   const router = useRouter();
   const [materials, setMaterials] = useState<InventoryMaterial[]>([]);
   const [batches, setBatches] = useState<DashboardBatch[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const loadData = async () => {
+    try {
+      setIsRefreshing(true);
+      const [inventory, productionRes] = await Promise.all([
+        fetchInventoryMaterials(),
+        productionAPI.getAll(),
+      ]);
+
+      const rawProductions = productionRes.data?.data || [];
+      const mappedBatches: DashboardBatch[] = rawProductions.map((item: any) => ({
+        id: item._id,
+        recipeName: item.recipe?.name || 'Unknown Recipe',
+        quantity: item.batchQuantity || 0,
+        estimatedOutput: item.estimatedOutput || 0,
+        wastage: item.wastage || 0,
+        status: item.status,
+        createdAt: item.created_at,
+        completedAt: item.updated_at,
+      }));
+
+      setMaterials(inventory);
+      setBatches(mappedBatches);
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error('Failed to load dashboard data', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const [inventory, productionRes] = await Promise.all([
-          fetchInventoryMaterials(),
-          productionAPI.getAll(),
-        ]);
+    loadData();
 
-        const rawProductions = productionRes.data?.data || [];
-        const mappedBatches: DashboardBatch[] = rawProductions.map((item: any) => ({
-          id: item._id,
-          recipeName: item.recipe?.name || 'Unknown Recipe',
-          quantity: item.batchQuantity || 0,
-          estimatedOutput: item.estimatedOutput || 0,
-          wastage: item.wastage || 0,
-          status: item.status,
-          createdAt: item.created_at,
-          completedAt: item.updated_at,
-        }));
+    // Auto-refresh every 30 seconds
+    const refreshInterval = setInterval(() => {
+      loadData();
+    }, 30000);
 
-        setMaterials(inventory);
-        setBatches(mappedBatches);
-      } catch (error) {
-        console.error('Failed to load dashboard data', error);
+    // Refresh data when tab/window becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadData();
       }
     };
 
-    load();
+    // Refresh data when window regains focus (navigating back from other pages)
+    const handleFocus = () => {
+      loadData();
+    };
+
+    // Listen for data changes from other pages/tabs
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'dashboard_refresh_trigger') {
+        loadData();
+        // Clear the trigger
+        localStorage.removeItem('dashboard_refresh_trigger');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('storage', handleStorageChange);
+
+    // Cleanup interval and listeners on unmount
+    return () => {
+      clearInterval(refreshInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   const lowStockItems = useMemo(
@@ -81,6 +126,27 @@ const Dashboard = () => {
 
   return (
     <DashboardLayout title="Dashboard" subtitle="Welcome back! Here's your production overview.">
+      {/* Refresh Button */}
+      <div className="flex justify-between items-center mb-4">
+        <div className="text-sm text-muted-foreground">
+          {lastUpdated && (
+            <>
+              Last updated: {lastUpdated.toLocaleTimeString()} • Auto-refreshes every 30s
+            </>
+          )}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={loadData}
+          disabled={isRefreshing}
+          className="gap-2"
+        >
+          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          {isRefreshing ? 'Refreshing...' : 'Refresh'}
+        </Button>
+      </div>
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8 ">
         <StatCard

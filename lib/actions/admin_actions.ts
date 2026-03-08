@@ -2,7 +2,7 @@
 
 import { login } from "../api/auth";
 import { setAuthToken, setUserData } from "../cookie";
-import { LoginData } from "@/app/(auth)/schema";
+import { LoginData } from "@/app/pages/(auth)/schema";
 import { redirect } from "next/navigation";
 
 export const handleAdminLogin = async (data: LoginData) => {

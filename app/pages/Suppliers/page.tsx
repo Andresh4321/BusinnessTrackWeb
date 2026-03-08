@@ -7,7 +7,7 @@ import { DashboardLayout } from '../dashboard/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { useToast } from '../hooks/use-toast';
+import { useToast } from '@/app/hooks/use-toast';
 import { supplierApi } from '@/lib/api/suppliers';
 import { messagingApi } from '@/lib/api/messaging';
 import {

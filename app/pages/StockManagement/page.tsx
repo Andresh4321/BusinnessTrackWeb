@@ -6,9 +6,10 @@ import { DashboardLayout } from '../dashboard/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { useToast } from '../hooks/use-toast';
+import { useToast } from '../../hooks/use-toast';
 import { fetchInventoryMaterials, InventoryMaterial } from '@/lib/api/material';
 import { stockManagementApi } from '@/lib/api/stockmanagement';
+import { triggerDashboardRefresh } from '@/lib/utils/dashboardRefresh';
 import {
   Dialog,
   DialogContent,
@@ -110,6 +111,7 @@ const StockManagement = () => {
       setRemarks('');
       setIsOpen(false);
       await loadData();
+      triggerDashboardRefresh();
     } catch (error: any) {
       toast({
         title: 'Error',

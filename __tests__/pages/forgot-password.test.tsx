@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import ForgotPasswordPage from '@/app/(auth)/handleForgotPassword/page'
+import ForgotPasswordPage from '@/app/pages/(auth)/handleForgotPassword/page'
 
 // Mock the auth API
 jest.mock('@/lib/api/auth', () => ({

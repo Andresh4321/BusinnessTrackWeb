@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import Messaging from '@/app/Messaging/page'
+import Messaging from '@/app/pages/Messaging/page'
 import { mockAppContextValue } from '../utils/test-utils'
 
 // Mock dependencies

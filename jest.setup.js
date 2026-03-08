@@ -15,11 +15,14 @@ beforeAll(() => {
       message.includes('<defs>') ||
       message.includes('Cross origin') ||
       message.includes('unrecognized in this browser') ||
-      message.includes('incorrect casing')
+      message.includes('incorrect casing') ||
+      message.includes('AggregateError') ||
+      message.includes('XMLHttpRequest') ||
+      message.includes('not wrapped in act')
     ) {
       return
     }
-    originalError.call(console, ...args)
+    originalError.apply(console, args)
   }
 
   console.log = (...args) => {
@@ -31,7 +34,7 @@ beforeAll(() => {
     ) {
       return
     }
-    originalLog.call(console, ...args)
+    originalLog.apply(console, args)
   }
 
   console.warn = (...args) => {
@@ -43,7 +46,7 @@ beforeAll(() => {
     ) {
       return
     }
-    originalWarn.call(console, ...args)
+    originalWarn.apply(console, args)
   }
 })
 

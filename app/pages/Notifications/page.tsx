@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '../dashboard/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { useToast } from '../hooks/use-toast';
+import { useToast } from '../../hooks/use-toast';
 import { messagingApi } from '@/lib/api/messaging';
 
 interface Notification {

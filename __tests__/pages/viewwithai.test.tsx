@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import AIAssistant from '@/app/AIAssistant/page'
+import AIAssistant from '@/app/pages/AIAssistant/page'
 
 // Mock dependencies
 jest.mock('@/app/dashboard/DashboardLayout', () => ({

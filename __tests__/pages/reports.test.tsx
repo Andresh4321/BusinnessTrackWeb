@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import Reports from '@/app/Reports/page'
+import Reports from '@/app/pages/Reports/page'
 import { mockAppContextValue } from '../utils/test-utils'
 
 // Mock recharts
@@ -16,6 +16,24 @@ jest.mock('recharts', () => ({
   Tooltip: () => null,
   ResponsiveContainer: ({ children }: any) => <div>{children}</div>,
   Cell: () => null,
+}))
+
+// Mock API dependencies
+jest.mock('@/lib/api/reports', () => ({
+  reportsApi: {
+    getSnapshot: jest.fn(() => Promise.resolve({
+      materials: [
+        {
+          id: '1',
+          name: 'Test Material',
+          unit: 'kg',
+          quantity: 100,
+          costPerUnit: 10,
+          minimumStock: 20,
+        },
+      ],
+    })),
+  },
 }))
 
 // Mock dependencies
